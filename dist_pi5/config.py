@@ -1,0 +1,9 @@
+# Updated configuration
+LICENSE_KEY = ""
+LICENSE_SERVER_URL = "https://dmxsmartlink.whitecrowsecurity.com"
+DEVICE_JSON = "devices.json"
+GROUP_JSON = "groups.json"
+ARTNET_PORT = 6454
+HOMEBRIDGE_API_IP = "http://localhost:8581"
+HOMEBRIDGE_USERNAME = "admin"
+HOMEBRIDGE_PASSWORD = "admin"
