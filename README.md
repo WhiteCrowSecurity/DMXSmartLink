@@ -1,4 +1,7 @@
+
 DMX Smart Link – Installation Instructions
+
+Best Tutorials for the product:  https://www.youtube.com/@WhiteCrowSecurity
 
 1. Install a basic Ubuntu Server on hardware such as a Raspberry Pi 5 or a VM with at least 2 CPUs and 4GB of RAM.
 
