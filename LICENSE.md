@@ -1,1 +1,37 @@
-License
+DMX Smart Link — Copyright & License
+=====================================
+
+Copyright © 2025 White Crow Security LLC.  
+All Rights Reserved.
+
+This software and accompanying documentation, including the installation instructions (“DMX Smart Link”), are proprietary to White Crow Security LLC (“Licensor”).
+
+You are granted a limited, non-exclusive, non-transferable license to install and use DMX Smart Link solely for your personal or internal business purposes, in accordance with the accompanying documentation.
+
+You MAY:
+- Install and use DMX Smart Link on one or more devices you own or control.
+- Use the software to control and manage your own devices and lighting systems.
+- Make copies of the documentation and installation instructions solely for your internal use.
+
+You MAY NOT:
+- Copy, modify, distribute, sell, sublicense, lease, or otherwise transfer this software or its components to any third party.
+- Reverse-engineer, decompile, or disassemble the software.
+- Use the software for any unlawful or unauthorized purpose.
+
+No Warranty
+-----------
+This software is provided “AS IS” without warranty of any kind. White Crow Security LLC disclaims all warranties, express or implied, including but not limited to warranties of merchantability and fitness for a particular purpose.
+
+Limitation of Liability
+-----------------------
+In no event shall White Crow Security LLC or its affiliates be liable for any damages arising from the use or inability to use this software.
+
+Support
+-------
+For technical support, please contact: support@whitecrowsecurity.com
+
+By using this software, you agree to the terms and conditions above.
+
+White Crow Security LLC
+Stafford, Virginia, USA
+https://whitecrowsecurity.com
