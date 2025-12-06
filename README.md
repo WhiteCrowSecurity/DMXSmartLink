@@ -4,49 +4,50 @@ DMX Smart Link – Installation Instructions
 Best Tutorials for the product:  https://www.youtube.com/@WhiteCrowSecurity
 
 1. Install a basic Ubuntu Server on hardware such as a Raspberry Pi 5 or a VM with at least 2 CPUs and 4GB of RAM.
+     - Get the OVF image for Intel systems here https://www.dropbox.com/scl/fi/q2xqj8dfd8jqexwyuchy9/dmxsmartlink-vm-intel-ovf.zip?rlkey=g4i1bg6m1kpgdp4xo22fewcre&st=45bl1380&dl=1
 
-2. Obtain the IP address of the host by typing either:
+3. Obtain the IP address of the host by installing the iOS iPhone App at https://apps.apple.com/us/app/dmxsmartlink-hub/id6753700995 or typing either:
    - `ip a`
    - or `ip config`
    (You will need this IP address later.)
 
-3. Copy all files from `dmxsmartlink.zip` into the `/home/$USER` folder.
+4. Copy all files from `dmxsmartlink.zip` into the `/home/$USER` folder.
 
-4. Open a terminal and type:
+5. Open a terminal and type:
    - `sudo su`
 
-5. Make the setup script executable:
+6. Make the setup script executable:
    - `chmod +x setup.sh`
 
-6. Run the setup script:
+7. Run the setup script:
    - `sudo ./setup.sh`
 
-7. After the automated reboot, browse to:
+8. After the automated reboot, browse to:
    - `https://<YOUR_IP_ADDRESS>:5000`
 
-8. Click the **"Homebridge UI"** link and then click **"GET STARTED"**.
+9. Click the **"Homebridge UI"** link and then click **"GET STARTED"**.
 
-9. Create a username and password and remember these for future steps.
+10. Create a username and password and remember these for future steps.
 
-10. Click **"OPEN DASHBOARD"**, then navigate to **"Plugins"** on the top-left navigation bar.
+11. Click **"OPEN DASHBOARD"**, then navigate to **"Plugins"** on the top-left navigation bar.
 
-11. Click **"UPDATE"** for the available update for **Homebridge UI**, then click **"CLOSE"**.
+12. Click **"UPDATE"** for the available update for **Homebridge UI**, then click **"CLOSE"**.
 
-12. Click the **Restart** button on the top-right corner.
+13. Click the **Restart** button on the top-right corner.
 
-13. Once restarted, click the **power plug icon** on the top-left sidebar to access the plugins page.
+14. Once restarted, click the **power plug icon** on the top-left sidebar to access the plugins page.
 
-14. In the top-left search bar, type **"Alexa"** and press **Enter**.
+15. In the top-left search bar, type **"Alexa"** and press **Enter**.
 
-15. Click the orange **Download** button on the **"Homebridge Alexa Smarthome"** plugin by @joeyhage.
+16. Click the orange **Download** button on the **"Homebridge Alexa Smarthome"** plugin by @joeyhage.
 
-16. Scroll to the **"Proxy Client Host"** field and enter your **IP address** from step 2 (Do NOT use 127.0.0.1 or localhost). Click **SAVE** at the bottom-right.
+17. Scroll to the **"Proxy Client Host"** field and enter your **IP address** from step 2 (Do NOT use 127.0.0.1 or localhost). Click **SAVE** at the bottom-right.
 
-17. Enable the **child bridge** by toggling "HomebridgeAlexaSmartHome" and click **SAVE**.
+18. Enable the **child bridge** by toggling "HomebridgeAlexaSmartHome" and click **SAVE**.
 
-18. Click **Restart** on the top-right again.
+19. Click **Restart** on the top-right again.
 
-19. Open another browser tab and go to:
+20. Open another browser tab and go to:
    - `http://<YOUR_IP_ADDRESS>:9000`
 
 20. Enter your Amazon email, password, and OTP from your phone. You should see:
