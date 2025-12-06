@@ -4,6 +4,10 @@ DMX Smart Link – Installation Instructions
 Best Tutorials for the product:  https://www.youtube.com/@WhiteCrowSecurity
 
 1. Install a basic Ubuntu Server on hardware such as a Raspberry Pi 5 or a VM with at least 2 CPUs and 4GB of RAM.
+     - Default credentials are:
+       Username: dmx
+       Password: dmx
+
      - Get the OVF image for Intel systems here https://www.dropbox.com/scl/fi/q2xqj8dfd8jqexwyuchy9/dmxsmartlink-vm-intel-ovf.zip?rlkey=g4i1bg6m1kpgdp4xo22fewcre&st=45bl1380&dl=1
 
 3. Obtain the IP address of the host by installing the iOS iPhone App at https://apps.apple.com/us/app/dmxsmartlink-hub/id6753700995 or typing either:
