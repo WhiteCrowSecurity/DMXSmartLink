@@ -1,12 +1,15 @@
 #!/bin/bash
 # setup.sh — DMXSmartLink installer (flat layout, Raspberry Pi OS/Ubuntu)
-# - Uses ONLY Python 3.12 (builds CPython 3.12.6 if missing)
+# - Uses any installed Python 3.x for the venv
+# - No CPython-from-source builds
 # - venv-only installs (PEP-668 safe)
 # - Installs Flask, requests, PyJWT[crypto], PyArmor
 # - Copies flat project (incl. pyarmor_runtime_000000/)
-# - Regenerates PyArmor runtime for py312
-# - Verifies obfuscated payload imports under py312
-# - Installs Docker (+ fallback via get.docker.com) + Homebridge + Govee plugin
+# - Regenerates PyArmor runtime for Python 3.x
+# - Verifies obfuscated payload imports under Python 3.x
+# - Installs Docker (+ fallback via get.docker.com)
+# - Starts Homebridge in Docker with host DBus socket for BLE access
+# - Installs Govee plugin inside the container + BLE build deps
 # - Creates systemd unit running flat main.py from the venv
 # - Ensures child processes use venv (PATH), and files are writable by service user
 set -Eeuo pipefail
@@ -28,12 +31,11 @@ TARGET_DIR="$HOME_DIR/dmxsmartlink"
 SERVICE_FILE="/etc/systemd/system/dmxsmartlink.service"
 CONFIG_DIR="/home/$USER_NAME/homebridge-config"
 
-# ---------------- CPython 3.12 ----------------
-PY_PREFIX="/usr/local"
-PY312_VER="3.12.6"
-PY312_BIN="$PY_PREFIX/bin/python3.12"
+# ---------------- Python 3.x ----------------
+PYTHON_BIN=""
 
 # ---------------- Custom Govee plugin repo ----------------
+# You can swap this to @homebridge-plugins/homebridge-govee if you want the official one
 GOVEE_REPO="github:cybermancerr/homebridge-govee#latest"
 
 log() { echo -e "$*"; }
@@ -88,11 +90,9 @@ install_docker() {
     sh /tmp/get-docker.sh
   fi
 
-  # Enable and start Docker
   systemctl enable docker
   systemctl start docker
 
-  # Final verification
   if ! command -v docker >/dev/null 2>&1; then
     echo "❌ Docker CLI not found after installation attempts. Aborting."
     exit 10
@@ -104,54 +104,63 @@ install_docker() {
 
 ensure_base_tooling() {
   log "------------------------------------------------------"
-  log "STEP 4: Installing base tooling (venv + build deps for CPython if needed)..."
+  log "STEP 4: Installing base tooling (venv + basics)..."
   apt_update
   apt_install python3 python3-venv python3-pip curl ca-certificates build-essential wget openssl
   echo
 }
 
-build_cpython312_if_needed() {
-  if command -v "$PY312_BIN" >/dev/null 2>&1; then
-    log "Found $("$PY312_BIN" -V) — will use this for the venv."
+# ---------- Host-side BLE prerequisites (Pi 5 / Raspberry Pi OS / Ubuntu) ----------
+install_ble_support_host() {
+  log "------------------------------------------------------"
+  log "STEP 4b: Installing host Bluetooth / BLE dependencies..."
+  # These follow the Homebridge Bluetooth wiki recommendations.
+  # pi-bluetooth will simply be ignored on non-Raspberry Pi distros.
+  apt_update
+  apt_install bluetooth bluez libbluetooth-dev libudev-dev || true
+  apt_install pi-bluetooth || true
+
+  systemctl enable bluetooth || true
+  systemctl restart bluetooth || true
+
+  # Quick hint for the operator:
+  log "    → Host Bluetooth stack should now be active (check with: hciconfig or bluetoothctl show)."
+  echo
+}
+
+ensure_python() {
+  log "------------------------------------------------------"
+  log "STEP 5: Ensuring Python 3.x is available..."
+
+  # 1) Prefer any available python3.x version
+  if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="$(command -v python3)"
+    log "Found $("$PYTHON_BIN" -V) — will use this for the venv."
     return 0
   fi
 
-  log "------------------------------------------------------"
-  log "STEP 5: Building Python ${PY312_VER} from source (not found on system)…"
-  apt_update
-  apt_install \
-    libssl-dev zlib1g-dev libncurses5-dev libncursesw5-dev \
-    libreadline-dev libsqlite3-dev libffi-dev libbz2-dev liblzma-dev \
-    tk-dev uuid-dev
-
-  local td
-  td="$(mktemp -d)"
-  pushd "$td" >/dev/null
-  wget -q "https://www.python.org/ftp/python/${PY312_VER}/Python-${PY312_VER}.tgz"
-  tar xf "Python-${PY312_VER}.tgz"
-  cd "Python-${PY312_VER}"
-  ./configure --prefix="$PY_PREFIX" --enable-optimizations --with-ensurepip=install
-  make -j"$(nproc)"
-  make altinstall
-  popd >/dev/null
-  rm -rf "$td"
-
-  if ! command -v "$PY312_BIN" >/dev/null 2>&1; then
-    echo "❌ Failed to install Python ${PY312_VER}"
-    exit 2
+  # 2) Fallback: if python3.13 exists, use it
+  if command -v python3.13 >/dev/null 2>&1; then
+    PYTHON_BIN="$(command -v python3.13)"
+    log "Found $("$PYTHON_BIN" -V) — will use this for the venv."
+    return 0
   fi
-  log "✅ Installed $("$PY312_BIN" -V)"
-  echo
+
+  # If no Python 3.x is found
+  echo "❌ Python 3.x not found."
+  echo "   This project REQUIRES Python 3.x. Please install Python 3.x, then rerun this script."
+  exit 2
 }
 
 create_venv_and_install() {
   log "------------------------------------------------------"
-  log "STEP 6: Creating venv on Python 3.12 and installing deps…"
+  log "STEP 6: Creating venv on Python 3.x and installing deps…"
+  log "    Using interpreter: $("$PYTHON_BIN" -V)"
   sudo -u "$USER_NAME" bash -lc "
     set -e
     cd '$TARGET_DIR'
     rm -rf .venv
-    '$PY312_BIN' -m venv .venv
+    '$PYTHON_BIN' -m venv .venv
     source .venv/bin/activate
     pip install -U pip
     pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core
@@ -159,9 +168,9 @@ create_venv_and_install() {
   echo
 }
 
-regenerate_pyarmor_runtime_py312() {
+regenerate_pyarmor_runtime_py313() {
   log "------------------------------------------------------"
-  log "STEP 7: Regenerating PyArmor runtime for Python 3.12 and replacing any mismatched runtime…"
+  log "STEP 7: Regenerating PyArmor runtime for Python 3.x and replacing any mismatched runtime…"
   sudo -u "$USER_NAME" bash -lc "
     set -e
     cd '$TARGET_DIR'
@@ -178,20 +187,22 @@ regenerate_pyarmor_runtime_py312() {
   echo
 }
 
-verify_import_under_312() {
+verify_import_under_python() {
   log "------------------------------------------------------"
-  log "STEP 8: Verifying obfuscated payload imports under Python 3.12…"
+  log "STEP 8: Verifying obfuscated payload imports under Python 3.x…"
   "$TARGET_DIR/.venv/bin/python" - <<PY
 import sys, importlib, traceback
 sys.path.insert(0, "$TARGET_DIR")
+print("    Running import test under:", sys.version)
 try:
     importlib.import_module("main")
-    print("✅ IMPORT_OK: main imports under Python 3.12")
+    print("✅ IMPORT_OK: main imports under Python", sys.version)
 except RuntimeError as e:
     s = str(e)
     print("❌ IMPORT_FAIL:", s)
     if "this Python version is not supported" in s:
-        print("HINT: These files were likely obfuscated for a different Python minor (e.g., 3.11 or 3.13).")
+        print("HINT: These files were likely obfuscated for a different Python minor.")
+        print("      This installer is pinned to Python 3.x; make sure the obfuscation target matches.")
         raise SystemExit(3)
     raise
 except Exception as e:
@@ -211,10 +222,22 @@ add_user_to_docker() {
   echo
 }
 
+# ---------- Detect host DBus socket (for BLE in Docker) ----------
+detect_dbus_socket_dir() {
+  # Returns host directory that contains system_bus_socket, or empty string
+  if [[ -S /run/dbus/system_bus_socket ]]; then
+    echo "/run/dbus"
+  elif [[ -S /var/run/dbus/system_bus_socket ]]; then
+    echo "/var/run/dbus"
+  else
+    echo ""
+  fi
+}
+
 start_homebridge() {
   log "------------------------------------------------------"
   log "STEP 10: Pulling Homebridge Docker image..."
-  if ! command -v docker >/dev/null 2%; then
+  if ! command -v docker >/dev/null 2>&1; then
     echo "❌ docker CLI not found; install_docker must succeed before this step."
     exit 11
   fi
@@ -222,38 +245,56 @@ start_homebridge() {
   echo
 
   log "------------------------------------------------------"
-  log "STEP 11: Starting Homebridge container on ports 8581/9000..."
+  log "STEP 11: Starting Homebridge container on ports 8581/9000 with BLE support..."
   mkdir -p "$CONFIG_DIR"
   chown "$USER_NAME:$USER_NAME" "$CONFIG_DIR"
 
   if docker ps -a --format '{{.Names}}' | grep -q '^homebridge$'; then
-    log "Existing 'homebridge' container found; removing to recreate..."
+    log "    Existing 'homebridge' container found; removing to recreate..."
     docker rm -f homebridge || true
+  fi
+
+  # Mount DBus socket into container at /run/dbus:ro per Bluetooth wiki
+  local DBUS_HOST_DIR
+  DBUS_HOST_DIR="$(detect_dbus_socket_dir)"
+  local DBUS_VOLUME=""
+  if [[ -n "$DBUS_HOST_DIR" ]]; then
+    DBUS_VOLUME="-v ${DBUS_HOST_DIR}:/run/dbus:ro"
+    log "    → Using DBus socket from ${DBUS_HOST_DIR} -> /run/dbus:ro in container."
+  else
+    log "    ⚠ WARNING: No DBus system_bus_socket found; BLE plugins may not work in Docker."
   fi
 
   docker run -d \
     --name homebridge \
     --restart=always \
-    -p 8581:8581 \
-    -p 9000:9000 \
+    --network host \
+    ${DBUS_VOLUME} \
     -v "$CONFIG_DIR":/homebridge \
     homebridge/homebridge
 
   log "    → Homebridge container started."
-  log "    → Visit http://<your-pi-ip>:8581 to finish Homebridge setup."
+  log "    → Visit http://<your-pi-or-ubuntu-ip>:8581 to finish Homebridge setup."
   echo
-  sleep 5
 }
 
 install_govee_plugin() {
   log "------------------------------------------------------"
-  log "STEP 12: Installing custom Govee plugin from Git into Homebridge container..."
+  log "STEP 12: Installing Govee plugin into Homebridge container (with BLE deps)..."
+
+  # Install build/runtime deps for noble stack inside the container
   docker exec -u root -e DEBIAN_FRONTEND=noninteractive -e NEEDRESTART_MODE=a homebridge \
-    bash -lc "apt-get update -yq && apt-get install -yq --no-install-recommends git curl || true" || true
+    bash -lc "apt-get update -yq && apt-get install -yq --no-install-recommends git curl bluetooth bluez libbluetooth-dev libudev-dev pi-bluetooth || true"
+
+  # Install the plugin itself
   docker exec homebridge bash -lc "cd /homebridge && npm install '$GOVEE_REPO' || true"
+
+  # Give node cap_net_raw so noble can open HCI sockets if needed
+  docker exec -u root homebridge bash -lc 'setcap cap_net_raw+eip "$(eval readlink -f "$(which node)")" || true'
+
   docker exec homebridge bash -lc "cd /homebridge && npm ls --depth=0 || true"
   docker restart homebridge >/dev/null
-  log "    → Custom Govee plugin installed and Homebridge restarted."
+  log "    → Govee plugin installed, BLE deps present, and Homebridge restarted."
   echo
 }
 
@@ -298,14 +339,15 @@ echo
 ENTRYPOINT_REL="$(require_entrypoint)"
 copy_project
 ensure_base_tooling
-build_cpython312_if_needed
+install_ble_support_host        # Host-side BLE support (Pi OS + Ubuntu)
+ensure_python
 create_venv_and_install
-regenerate_pyarmor_runtime_py312
-verify_import_under_312
+regenerate_pyarmor_runtime_py313
+verify_import_under_python
 install_docker
 add_user_to_docker
-start_homebridge
-install_govee_plugin
+start_homebridge                # Starts with DBus exposed into container
+install_govee_plugin            # Installs plugin + BLE deps + setcap inside container
 write_service
 
 log "✅ All steps complete."
