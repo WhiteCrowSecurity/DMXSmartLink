@@ -40,13 +40,53 @@ GOVEE_REPO="github:cybermancerr/homebridge-govee#latest"
 
 log() { echo -e "$*"; }
 
-require_entrypoint() {
-  if [[ -f "$SCRIPT_DIR/main.py" ]]; then
-    echo "main.py"
-  else
-    echo "ERROR: main.py not found in $SCRIPT_DIR" >&2
-    exit 1
+detect_architecture() {
+  # Detect architecture and return the appropriate dist directory name
+  local arch_dir=""
+  
+  # Check for Raspberry Pi (Raspbian/Debian on ARM)
+  if [ -f /etc/os-release ]; then
+    local os_release=$(cat /etc/os-release | tr '[:upper:]' '[:lower:]')
+    if echo "$os_release" | grep -q "raspbian\|raspberry"; then
+      echo "dist_pi5"
+      return 0
+    fi
   fi
+  
+  # Check CPU info for better detection
+  local machine=$(uname -m)
+  local cpuinfo=""
+  if [ -f /proc/cpuinfo ]; then
+    cpuinfo=$(cat /proc/cpuinfo | tr '[:upper:]' '[:lower:]')
+  fi
+  
+  # ARM architecture (64-bit)
+  if [[ "$machine" == "aarch64" ]] || [[ "$machine" == "arm64" ]] || [[ "$machine" == "armv8l" ]]; then
+    # Check for Apple Silicon
+    if echo "$cpuinfo" | grep -q "apple"; then
+      if echo "$cpuinfo" | grep -q "m5"; then
+        echo "dist_ubuntu_m5"
+        return 0
+      elif echo "$cpuinfo" | grep -q "m4"; then
+        echo "dist_ubuntu_m4"
+        return 0
+      fi
+      echo "dist_ubuntu_m4"  # Default Apple Silicon
+      return 0
+    fi
+    # Default ARM (Raspberry Pi should have been caught above, but just in case)
+    echo "dist_pi5"
+    return 0
+  fi
+  
+  # Intel/AMD x86_64
+  if [[ "$machine" == "x86_64" ]] || [[ "$machine" == "amd64" ]] || [[ "$machine" == "i686" ]] || [[ "$machine" == "i386" ]]; then
+    echo "dist_ubuntu_intel"
+    return 0
+  fi
+  
+  # Default fallback
+  echo "dist_ubuntu_intel"
 }
 
 copy_project() {
@@ -54,26 +94,123 @@ copy_project() {
   mkdir -p "$TARGET_DIR"
   chown "$USER_NAME:$USER_NAME" "$TARGET_DIR"
 
-  log "    Copying selected files/folders into $TARGET_DIR..."
+  # Ensure minimal tooling for GitHub download
+  if ! command -v curl >/dev/null 2>&1; then apt_update; apt_install curl ca-certificates; fi
+  if ! command -v unzip >/dev/null 2>&1; then apt_update; apt_install unzip; fi
+  if ! command -v python3 >/dev/null 2>&1; then apt_update; apt_install python3; fi
+
+  # Detect architecture to determine which dist directory to use
+  local DIST_DIR=$(detect_architecture)
+  log "    Detected architecture, using GitHub directory: $DIST_DIR"
+  
+  # GitHub repository details
+  local GITHUB_REPO="WhiteCrowSecurity/DMXSmartLink"
+  local GITHUB_BRANCH="main"
+  local TEMP_DIR="/tmp/dmxsmartlink-src-$$"
+  local ZIP_PATH="/tmp/dmxsmartlink-release-$$.zip"
+
+  rm -rf "$TEMP_DIR" "$ZIP_PATH"
+  mkdir -p "$TEMP_DIR"
+
+  log "    Fetching latest release zip (preferred)..."
+  local API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+  local REL_JSON=""
+  if command -v curl >/dev/null 2>&1; then
+    REL_JSON="$(curl -fsSL "$API_URL" || true)"
+  fi
+
+  local DOWNLOAD_URL=""
+  if [[ -n "$REL_JSON" ]] && command -v python3 >/dev/null 2>&1; then
+    DOWNLOAD_URL="$(python3 - <<PY
+import json,sys
+try:
+    d=json.loads(sys.stdin.read() or "{}")
+    assets=d.get("assets") or []
+    # Prefer an asset named dmxsmartlink.zip if present
+    for a in assets:
+        u=a.get("browser_download_url","")
+        n=a.get("name","").lower()
+        if n == "dmxsmartlink.zip":
+            print(u); raise SystemExit(0)
+    # Else first .zip asset
+    for a in assets:
+        u=a.get("browser_download_url","")
+        if u.endswith(".zip"):
+            print(u); raise SystemExit(0)
+    # Fallback to zipball_url
+    print(d.get("zipball_url",""))
+except Exception:
+    print("")
+PY
+<<<"$REL_JSON")"
+  fi
+
+  if [[ -n "$DOWNLOAD_URL" ]]; then
+    log "    Downloading release: $DOWNLOAD_URL"
+    if curl -fL "$DOWNLOAD_URL" -o "$ZIP_PATH"; then
+      if unzip -q "$ZIP_PATH" -d "$TEMP_DIR"; then
+        local ROOT_DIR
+        ROOT_DIR="$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+        if [[ -n "$ROOT_DIR" ]] && [[ -d "$ROOT_DIR/$DIST_DIR" ]]; then
+          SRC_DIR="$ROOT_DIR/$DIST_DIR"
+          log "    Using extracted release folder: $SRC_DIR"
+        else
+          SRC_DIR=""
+        fi
+      fi
+    fi
+  fi
+
+  # Fallback: shallow clone if release download failed
+  if [[ -z "${SRC_DIR:-}" ]]; then
+    log "    Release download failed; falling back to shallow git clone..."
+    if ! command -v git >/dev/null 2>&1; then
+      apt_update
+      apt_install git
+    fi
+    local GITHUB_URL="https://github.com/${GITHUB_REPO}.git"
+    if ! git clone --depth 1 --branch "$GITHUB_BRANCH" "$GITHUB_URL" "$TEMP_DIR/repo" 2>&1; then
+      log "❌ Failed to download repository (release + clone failed)."
+      rm -rf "$TEMP_DIR" "$ZIP_PATH"
+      exit 1
+    fi
+    if [[ ! -d "$TEMP_DIR/repo/$DIST_DIR" ]]; then
+      log "❌ Directory $DIST_DIR not found in repository"
+      rm -rf "$TEMP_DIR" "$ZIP_PATH"
+      exit 1
+    fi
+    SRC_DIR="$TEMP_DIR/repo/$DIST_DIR"
+  fi
+
+  log "    Copying files from $DIST_DIR into $TARGET_DIR..."
   local items=(
     artnet_controller.py config.py device_inventory.py group_init.py group_manager.py main.py
     license_status.txt HOMEBRIDGE_LICENSE.txt LICENSE.txt README.txt
     pyarmor_runtime_000000
   )
+  
   for it in "${items[@]}"; do
-    [[ -e "$SCRIPT_DIR/$it" ]] || { log "    - $it not found, skipping."; continue; }
-    if [[ -d "$SCRIPT_DIR/$it" ]]; then
-      rm -rf "$TARGET_DIR/$it"
-      cp -a "$SCRIPT_DIR/$it" "$TARGET_DIR/"
+    if [ -e "$SRC_DIR/$it" ]; then
+      if [ -d "$SRC_DIR/$it" ]; then
+        rm -rf "$TARGET_DIR/$it"
+        cp -a "$SRC_DIR/$it" "$TARGET_DIR/"
+        log "    ✓ Copied directory: $it"
+      else
+        cp -a "$SRC_DIR/$it" "$TARGET_DIR/"
+        log "    ✓ Copied file: $it"
+      fi
     else
-      cp -a "$SCRIPT_DIR/$it" "$TARGET_DIR/"
+      log "    ⚠ $it not found in $DIST_DIR, skipping."
     fi
   done
-
+  
+  # Clean up temp download directory
+  rm -rf "$TEMP_DIR" "$ZIP_PATH"
+  
   chown -R "$USER_NAME:$USER_NAME" "$TARGET_DIR"
   find "$TARGET_DIR" -type d -exec chmod 775 {} \;
   find "$TARGET_DIR" -type f -exec chmod 664 {} \;
-
+  
   echo
 }
 
@@ -106,7 +243,10 @@ ensure_base_tooling() {
   log "------------------------------------------------------"
   log "STEP 4: Installing base tooling (venv + basics)..."
   apt_update
-  apt_install python3 python3-venv python3-pip curl ca-certificates build-essential wget openssl
+  apt_install python3 python3-venv python3-pip curl ca-certificates build-essential wget openssl git unzip \
+              avahi-daemon libnss-mdns dbus
+  systemctl enable avahi-daemon || true
+  systemctl restart avahi-daemon || true
   echo
 }
 
@@ -334,10 +474,25 @@ EOF
 
 # ========================== MAIN ==========================
 log "✅ STEP 1: Detected script directory: $SCRIPT_DIR (user = $USER_NAME)"
+
+# Install git early if needed (for downloading from GitHub)
+if ! command -v git >/dev/null 2>&1; then
+  log "Installing git for GitHub access..."
+  apt_update
+  apt_install git || true
+fi
+
 echo
 
-ENTRYPOINT_REL="$(require_entrypoint)"
 copy_project
+
+# Verify main.py was downloaded
+if [ ! -f "$TARGET_DIR/main.py" ]; then
+  log "❌ ERROR: main.py not found in $TARGET_DIR after download"
+  exit 1
+fi
+
+ENTRYPOINT_REL="main.py"
 ensure_base_tooling
 install_ble_support_host        # Host-side BLE support (Pi OS + Ubuntu)
 ensure_python
