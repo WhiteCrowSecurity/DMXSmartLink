@@ -4,9 +4,8 @@
 # - No CPython-from-source builds
 # - venv-only installs (PEP-668 safe)
 # - Installs Flask, requests, PyJWT[crypto], PyArmor
-# - Copies flat project (incl. pyarmor_runtime_000000/)
-# - Regenerates PyArmor runtime for Python 3.x
-# - Verifies obfuscated payload imports under Python 3.x
+# - Copies flat project (incl. pyarmor_runtime_XXXXX/ for PyArmor Pro)
+# - Files are pre-obfuscated, runtime is included
 # - Installs Docker (+ fallback via get.docker.com)
 # - Starts Homebridge in Docker with host DBus socket for BLE access
 # - Installs Govee plugin inside the container + BLE build deps
@@ -184,11 +183,11 @@ PY
 
   log "    Copying files from $DIST_DIR into $TARGET_DIR..."
   local items=(
-    artnet_controller.py config.py device_inventory.py group_init.py group_manager.py main.py
+    artnet_controller.py config.py device_inventory.py device_registry.py group_init.py group_manager.py main.py
     license_status.txt HOMEBRIDGE_LICENSE.txt LICENSE.txt README.txt
-    pyarmor_runtime_000000
   )
   
+  # Copy standard files
   for it in "${items[@]}"; do
     if [ -e "$SRC_DIR/$it" ]; then
       if [ -d "$SRC_DIR/$it" ]; then
@@ -204,12 +203,44 @@ PY
     fi
   done
   
+  # Dynamically find and copy PyArmor Pro runtime folder (pyarmor_runtime_XXXXX)
+  log "    Finding PyArmor Pro runtime folder..."
+  local pyarmor_runtime=""
+  for dir in "$SRC_DIR"/pyarmor_runtime_*; do
+    if [ -d "$dir" ]; then
+      pyarmor_runtime="$(basename "$dir")"
+      rm -rf "$TARGET_DIR/$pyarmor_runtime"
+      cp -a "$dir" "$TARGET_DIR/"
+      log "    ✓ Copied PyArmor Pro runtime: $pyarmor_runtime"
+      
+      # Ensure .so file has correct permissions (executable and readable)
+      if [ -f "$TARGET_DIR/$pyarmor_runtime/pyarmor_runtime.so" ]; then
+        chmod 755 "$TARGET_DIR/$pyarmor_runtime/pyarmor_runtime.so"
+        log "    ✓ Set permissions on pyarmor_runtime.so"
+      fi
+      break
+    fi
+  done
+  
+  if [ -z "$pyarmor_runtime" ]; then
+    log "    ⚠ WARNING: No pyarmor_runtime_* folder found in $DIST_DIR"
+  fi
+  
+  # Copy providers directory if it exists
+  if [ -d "$SRC_DIR/providers" ]; then
+    rm -rf "$TARGET_DIR/providers"
+    cp -a "$SRC_DIR/providers" "$TARGET_DIR/"
+    log "    ✓ Copied directory: providers"
+  fi
+  
   # Clean up temp download directory
   rm -rf "$TEMP_DIR" "$ZIP_PATH"
   
   chown -R "$USER_NAME:$USER_NAME" "$TARGET_DIR"
   find "$TARGET_DIR" -type d -exec chmod 775 {} \;
   find "$TARGET_DIR" -type f -exec chmod 664 {} \;
+  # Ensure .so files are executable (required for PyArmor runtime)
+  find "$TARGET_DIR" -name "*.so" -exec chmod 755 {} \;
   
   echo
 }
@@ -308,54 +339,13 @@ create_venv_and_install() {
   echo
 }
 
-regenerate_pyarmor_runtime_py313() {
-  log "------------------------------------------------------"
-  log "STEP 7: Regenerating PyArmor runtime for Python 3.x and replacing any mismatched runtime…"
-  sudo -u "$USER_NAME" bash -lc "
-    set -e
-    cd '$TARGET_DIR'
-    source .venv/bin/activate
-    pyarmor gen runtime -O build/runtime_local || true
-    if [ -d build/runtime_local/pyarmor_runtime_000000 ]; then
-      rm -rf pyarmor_runtime_000000
-      cp -a build/runtime_local/pyarmor_runtime_000000 .
-    fi
-  "
-  chown -R "$USER_NAME:$USER_NAME" "$TARGET_DIR"
-  find "$TARGET_DIR" -type d -exec chmod 775 {} \;
-  find "$TARGET_DIR" -type f -exec chmod 664 {} \;
-  echo
-}
-
-verify_import_under_python() {
-  log "------------------------------------------------------"
-  log "STEP 8: Verifying obfuscated payload imports under Python 3.x…"
-  "$TARGET_DIR/.venv/bin/python" - <<PY
-import sys, importlib, traceback
-sys.path.insert(0, "$TARGET_DIR")
-print("    Running import test under:", sys.version)
-try:
-    importlib.import_module("main")
-    print("✅ IMPORT_OK: main imports under Python", sys.version)
-except RuntimeError as e:
-    s = str(e)
-    print("❌ IMPORT_FAIL:", s)
-    if "this Python version is not supported" in s:
-        print("HINT: These files were likely obfuscated for a different Python minor.")
-        print("      This installer is pinned to Python 3.x; make sure the obfuscation target matches.")
-        raise SystemExit(3)
-    raise
-except Exception as e:
-    print("❌ IMPORT_FAIL:", repr(e))
-    traceback.print_exc()
-    raise
-PY
-  echo
-}
+# NOTE: PyArmor Pro runtime is included and copied automatically
+# Files are pre-obfuscated with PyArmor Pro, runtime folder is detected and copied
+# No need to regenerate or verify when just copying files
 
 add_user_to_docker() {
   log "------------------------------------------------------"
-  log "STEP 9: Adding user '$USER_NAME' to the docker group..."
+  log "STEP 7: Adding user '$USER_NAME' to the docker group..."
   getent group docker >/dev/null 2>&1 || groupadd docker
   usermod -aG docker "$USER_NAME" || true
   log "    (You may need to log out/in for group changes to apply.)"
@@ -376,7 +366,7 @@ detect_dbus_socket_dir() {
 
 start_homebridge() {
   log "------------------------------------------------------"
-  log "STEP 10: Pulling Homebridge Docker image..."
+  log "STEP 8: Pulling Homebridge Docker image..."
   if ! command -v docker >/dev/null 2>&1; then
     echo "❌ docker CLI not found; install_docker must succeed before this step."
     exit 11
@@ -385,7 +375,7 @@ start_homebridge() {
   echo
 
   log "------------------------------------------------------"
-  log "STEP 11: Starting Homebridge container on ports 8581/9000 with BLE support..."
+  log "STEP 9: Starting Homebridge container on ports 8581/9000 with BLE support..."
   mkdir -p "$CONFIG_DIR"
   chown "$USER_NAME:$USER_NAME" "$CONFIG_DIR"
 
@@ -420,7 +410,7 @@ start_homebridge() {
 
 install_govee_plugin() {
   log "------------------------------------------------------"
-  log "STEP 12: Installing Govee plugin into Homebridge container (with BLE deps)..."
+  log "STEP 10: Installing Govee plugin into Homebridge container (with BLE deps)..."
 
   # Install build/runtime deps for noble stack inside the container
   docker exec -u root -e DEBIAN_FRONTEND=noninteractive -e NEEDRESTART_MODE=a homebridge \
@@ -443,7 +433,7 @@ write_service() {
   local workdir="/home/$USER_NAME/dmxsmartlink"
 
   log "------------------------------------------------------"
-  log "STEP 13: Creating systemd service at $SERVICE_FILE..."
+  log "STEP 11: Creating systemd service at $SERVICE_FILE..."
   cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=DMXSmartLink Dashboard Service
@@ -497,8 +487,6 @@ ensure_base_tooling
 install_ble_support_host        # Host-side BLE support (Pi OS + Ubuntu)
 ensure_python
 create_venv_and_install
-regenerate_pyarmor_runtime_py313
-verify_import_under_python
 install_docker
 add_user_to_docker
 start_homebridge                # Starts with DBus exposed into container
