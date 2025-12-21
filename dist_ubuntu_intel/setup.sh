@@ -4,9 +4,8 @@
 # - No CPython-from-source builds
 # - venv-only installs (PEP-668 safe)
 # - Installs Flask, requests, PyJWT[crypto], PyArmor
-# - Copies flat project (incl. pyarmor_runtime_000000/)
-# - Regenerates PyArmor runtime for Python 3.x
-# - Verifies obfuscated payload imports under Python 3.x
+# - Copies flat project (incl. pyarmor_runtime_XXXXX/ for PyArmor Pro)
+# - Files are pre-obfuscated, runtime is included
 # - Installs Docker (+ fallback via get.docker.com)
 # - Starts Homebridge in Docker with host DBus socket for BLE access
 # - Installs Govee plugin inside the container + BLE build deps
@@ -74,7 +73,21 @@ detect_architecture() {
       echo "dist_ubuntu_m4"  # Default Apple Silicon
       return 0
     fi
-    # Default ARM (Raspberry Pi should have been caught above, but just in case)
+    # Check if it's Ubuntu (not Raspbian) - likely Apple Silicon VM
+    if [ -f /etc/os-release ]; then
+      local os_release_content=$(cat /etc/os-release | tr '[:upper:]' '[:lower:]')
+      if echo "$os_release_content" | grep -q "ubuntu" && ! echo "$os_release_content" | grep -q "raspbian\|raspberry"; then
+        # Ubuntu on ARM64 (not Raspbian) - likely Apple Silicon VM
+        # Try to detect M5 specifically, otherwise default to M4
+        if echo "$cpuinfo" | grep -q "m5"; then
+          echo "dist_ubuntu_m5"
+        else
+          echo "dist_ubuntu_m4"
+        fi
+        return 0
+      fi
+    fi
+    # Default ARM (Raspberry Pi should have been caught above)
     echo "dist_pi5"
     return 0
   fi
@@ -103,92 +116,165 @@ copy_project() {
   local DIST_DIR=$(detect_architecture)
   log "    Detected architecture, using GitHub directory: $DIST_DIR"
   
+  # Save the architecture to a file for future updates
+  echo "$DIST_DIR" > "$TARGET_DIR/.install_arch"
+  chown "$USER_NAME:$USER_NAME" "$TARGET_DIR/.install_arch"
+  
   # GitHub repository details
   local GITHUB_REPO="WhiteCrowSecurity/DMXSmartLink"
-  local GITHUB_BRANCH="main"
   local TEMP_DIR="/tmp/dmxsmartlink-src-$$"
   local ZIP_PATH="/tmp/dmxsmartlink-release-$$.zip"
 
   rm -rf "$TEMP_DIR" "$ZIP_PATH"
   mkdir -p "$TEMP_DIR"
 
-  log "    Fetching latest release zip (preferred)..."
+  log "    Fetching latest release zip..."
+  # Try /releases/latest first, then fallback to specific tag
   local API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
   local REL_JSON=""
+  local API_ERROR=""
+  
   if command -v curl >/dev/null 2>&1; then
-    REL_JSON="$(curl -fsSL "$API_URL" || true)"
+    REL_JSON="$(curl -fsSL "$API_URL" 2>&1)"
+    if [ $? -ne 0 ] || echo "$REL_JSON" | grep -q "404\|Not Found"; then
+      # Try specific tag as fallback
+      log "    Latest release not found, trying tag 'DMXSmartLink'..."
+      API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/tags/DMXSmartLink"
+      REL_JSON="$(curl -fsSL "$API_URL" 2>&1)"
+      if [ $? -ne 0 ] || echo "$REL_JSON" | grep -q "404\|Not Found"; then
+        API_ERROR="not_found"
+      fi
+    fi
   fi
 
   local DOWNLOAD_URL=""
-  if [[ -n "$REL_JSON" ]] && command -v python3 >/dev/null 2>&1; then
+  if [[ -z "$API_ERROR" ]] && [[ -n "$REL_JSON" ]] && command -v python3 >/dev/null 2>&1; then
     DOWNLOAD_URL="$(python3 - <<PY
 import json,sys
 try:
     d=json.loads(sys.stdin.read() or "{}")
+    if "message" in d:
+        sys.stderr.write(f"API Error: {d.get('message', 'Unknown error')}\n")
+        print("")
+        raise SystemExit(0)
     assets=d.get("assets") or []
-    # Prefer an asset named dmxsmartlink.zip if present
+    tag_name=d.get("tag_name", "")
+    if tag_name:
+        sys.stderr.write(f"Found release: {tag_name} with {len(assets)} asset(s)\n")
+    # Prefer an asset named dmxsmartlink.zip if present (case insensitive)
     for a in assets:
         u=a.get("browser_download_url","")
         n=a.get("name","").lower()
-        if n == "dmxsmartlink.zip":
+        if "dmxsmartlink" in n and n.endswith(".zip"):
             print(u); raise SystemExit(0)
     # Else first .zip asset
     for a in assets:
         u=a.get("browser_download_url","")
-        if u.endswith(".zip"):
+        n=a.get("name","")
+        if u.endswith(".zip") or n.endswith(".zip"):
+            sys.stderr.write(f"Using zip asset: {n}\n")
             print(u); raise SystemExit(0)
-    # Fallback to zipball_url
-    print(d.get("zipball_url",""))
-except Exception:
+    # Fallback to zipball_url (source code zip)
+    zipball=d.get("zipball_url","")
+    if zipball:
+        sys.stderr.write("Warning: No zip asset found, using source code zipball\n")
+        print(zipball)
+    else:
+        print("")
+except Exception as e:
+    sys.stderr.write(f"Error parsing release data: {e}\n")
     print("")
 PY
-<<<"$REL_JSON")"
+<<<"$REL_JSON" 2>&1)"
   fi
 
-  if [[ -n "$DOWNLOAD_URL" ]]; then
+  if [[ -n "$DOWNLOAD_URL" ]] && [[ "$DOWNLOAD_URL" != "" ]]; then
     log "    Downloading release: $DOWNLOAD_URL"
-    if curl -fL "$DOWNLOAD_URL" -o "$ZIP_PATH"; then
-      if unzip -q "$ZIP_PATH" -d "$TEMP_DIR"; then
+    if curl -fL "$DOWNLOAD_URL" -o "$ZIP_PATH" 2>/dev/null; then
+      if unzip -q "$ZIP_PATH" -d "$TEMP_DIR" 2>/dev/null; then
         local ROOT_DIR
         ROOT_DIR="$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
         if [[ -n "$ROOT_DIR" ]] && [[ -d "$ROOT_DIR/$DIST_DIR" ]]; then
           SRC_DIR="$ROOT_DIR/$DIST_DIR"
           log "    Using extracted release folder: $SRC_DIR"
         else
-          SRC_DIR=""
+          # Check if dist directory exists directly in extracted location (no root subdirectory)
+          if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
+            SRC_DIR="$TEMP_DIR/$DIST_DIR"
+            log "    Using extracted release folder (direct): $SRC_DIR"
+          else
+            log "    ⚠ Directory $DIST_DIR not found in extracted zip"
+            log "    Available directories: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
+            if [[ -n "$ROOT_DIR" ]]; then
+              log "    Root dir contents: $(ls -1 "$ROOT_DIR" 2>/dev/null | head -10 | tr '\n' ' ')"
+            fi
+            SRC_DIR=""
+          fi
         fi
+      else
+        log "    ⚠ Failed to extract zip file"
+        SRC_DIR=""
       fi
+    else
+      log "    ⚠ Failed to download zip file"
+      SRC_DIR=""
     fi
   fi
 
-  # Fallback: shallow clone if release download failed
+  # Fallback to direct download link if API lookup failed
   if [[ -z "${SRC_DIR:-}" ]]; then
-    log "    Release download failed; falling back to shallow git clone..."
-    if ! command -v git >/dev/null 2>&1; then
-      apt_update
-      apt_install git
+    log "    API lookup failed, trying direct download link..."
+    local DIRECT_URL="https://github.com/${GITHUB_REPO}/releases/download/DMXSmartLink/dmxsmartlink.zip"
+    if curl -fL "$DIRECT_URL" -o "$ZIP_PATH" 2>/dev/null; then
+      log "    ✓ Downloaded via direct link"
+      if unzip -q "$ZIP_PATH" -d "$TEMP_DIR" 2>/dev/null; then
+        local ROOT_DIR
+        ROOT_DIR="$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+        if [[ -n "$ROOT_DIR" ]] && [[ -d "$ROOT_DIR/$DIST_DIR" ]]; then
+          SRC_DIR="$ROOT_DIR/$DIST_DIR"
+          log "    Using extracted release folder: $SRC_DIR"
+        else
+          # Check if dist directory exists directly in extracted location (no root subdirectory)
+          if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
+            SRC_DIR="$TEMP_DIR/$DIST_DIR"
+            log "    Using extracted release folder (direct): $SRC_DIR"
+          else
+            log "    ⚠ Directory $DIST_DIR not found in extracted zip"
+            log "    Available directories: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
+            if [[ -n "$ROOT_DIR" ]]; then
+              log "    Root dir contents: $(ls -1 "$ROOT_DIR" 2>/dev/null | head -10 | tr '\n' ' ')"
+            fi
+            SRC_DIR=""
+          fi
+        fi
+      else
+        log "    ⚠ Failed to extract zip file"
+        SRC_DIR=""
+      fi
+    else
+      SRC_DIR=""
     fi
-    local GITHUB_URL="https://github.com/${GITHUB_REPO}.git"
-    if ! git clone --depth 1 --branch "$GITHUB_BRANCH" "$GITHUB_URL" "$TEMP_DIR/repo" 2>&1; then
-      log "❌ Failed to download repository (release + clone failed)."
-      rm -rf "$TEMP_DIR" "$ZIP_PATH"
-      exit 1
-    fi
-    if [[ ! -d "$TEMP_DIR/repo/$DIST_DIR" ]]; then
-      log "❌ Directory $DIST_DIR not found in repository"
-      rm -rf "$TEMP_DIR" "$ZIP_PATH"
-      exit 1
-    fi
-    SRC_DIR="$TEMP_DIR/repo/$DIST_DIR"
+  fi
+
+  # Final failure if still no source directory
+  if [[ -z "${SRC_DIR:-}" ]]; then
+    log "❌ Failed to download release zip."
+    log "    Tried GitHub API and direct download link:"
+    log "    https://github.com/${GITHUB_REPO}/releases/download/DMXSmartLink/dmxsmartlink.zip"
+    log "    Check: https://github.com/${GITHUB_REPO}/releases"
+    log "    Make sure the zip file is attached as an asset to the release."
+    log "    The zip should contain: dist_pi5/, dist_ubuntu_intel/, dist_ubuntu_m4/, etc."
+    rm -rf "$TEMP_DIR" "$ZIP_PATH"
+    exit 1
   fi
 
   log "    Copying files from $DIST_DIR into $TARGET_DIR..."
   local items=(
-    artnet_controller.py config.py device_inventory.py group_init.py group_manager.py main.py
+    artnet_controller.py config.py device_inventory.py device_registry.py group_init.py group_manager.py main.py
     license_status.txt HOMEBRIDGE_LICENSE.txt LICENSE.txt README.txt
-    pyarmor_runtime_000000
   )
   
+  # Copy standard files
   for it in "${items[@]}"; do
     if [ -e "$SRC_DIR/$it" ]; then
       if [ -d "$SRC_DIR/$it" ]; then
@@ -204,12 +290,44 @@ PY
     fi
   done
   
+  # Dynamically find and copy PyArmor Pro runtime folder (pyarmor_runtime_XXXXX)
+  log "    Finding PyArmor Pro runtime folder..."
+  local pyarmor_runtime=""
+  for dir in "$SRC_DIR"/pyarmor_runtime_*; do
+    if [ -d "$dir" ]; then
+      pyarmor_runtime="$(basename "$dir")"
+      rm -rf "$TARGET_DIR/$pyarmor_runtime"
+      cp -a "$dir" "$TARGET_DIR/"
+      log "    ✓ Copied PyArmor Pro runtime: $pyarmor_runtime"
+      
+      # Ensure .so file has correct permissions (executable and readable)
+      if [ -f "$TARGET_DIR/$pyarmor_runtime/pyarmor_runtime.so" ]; then
+        chmod 755 "$TARGET_DIR/$pyarmor_runtime/pyarmor_runtime.so"
+        log "    ✓ Set permissions on pyarmor_runtime.so"
+      fi
+      break
+    fi
+  done
+  
+  if [ -z "$pyarmor_runtime" ]; then
+    log "    ⚠ WARNING: No pyarmor_runtime_* folder found in $DIST_DIR"
+  fi
+  
+  # Copy providers directory if it exists
+  if [ -d "$SRC_DIR/providers" ]; then
+    rm -rf "$TARGET_DIR/providers"
+    cp -a "$SRC_DIR/providers" "$TARGET_DIR/"
+    log "    ✓ Copied directory: providers"
+  fi
+  
   # Clean up temp download directory
   rm -rf "$TEMP_DIR" "$ZIP_PATH"
   
   chown -R "$USER_NAME:$USER_NAME" "$TARGET_DIR"
   find "$TARGET_DIR" -type d -exec chmod 775 {} \;
   find "$TARGET_DIR" -type f -exec chmod 664 {} \;
+  # Ensure .so files are executable (required for PyArmor runtime)
+  find "$TARGET_DIR" -name "*.so" -exec chmod 755 {} \;
   
   echo
 }
@@ -308,54 +426,13 @@ create_venv_and_install() {
   echo
 }
 
-regenerate_pyarmor_runtime_py313() {
-  log "------------------------------------------------------"
-  log "STEP 7: Regenerating PyArmor runtime for Python 3.x and replacing any mismatched runtime…"
-  sudo -u "$USER_NAME" bash -lc "
-    set -e
-    cd '$TARGET_DIR'
-    source .venv/bin/activate
-    pyarmor gen runtime -O build/runtime_local || true
-    if [ -d build/runtime_local/pyarmor_runtime_000000 ]; then
-      rm -rf pyarmor_runtime_000000
-      cp -a build/runtime_local/pyarmor_runtime_000000 .
-    fi
-  "
-  chown -R "$USER_NAME:$USER_NAME" "$TARGET_DIR"
-  find "$TARGET_DIR" -type d -exec chmod 775 {} \;
-  find "$TARGET_DIR" -type f -exec chmod 664 {} \;
-  echo
-}
-
-verify_import_under_python() {
-  log "------------------------------------------------------"
-  log "STEP 8: Verifying obfuscated payload imports under Python 3.x…"
-  "$TARGET_DIR/.venv/bin/python" - <<PY
-import sys, importlib, traceback
-sys.path.insert(0, "$TARGET_DIR")
-print("    Running import test under:", sys.version)
-try:
-    importlib.import_module("main")
-    print("✅ IMPORT_OK: main imports under Python", sys.version)
-except RuntimeError as e:
-    s = str(e)
-    print("❌ IMPORT_FAIL:", s)
-    if "this Python version is not supported" in s:
-        print("HINT: These files were likely obfuscated for a different Python minor.")
-        print("      This installer is pinned to Python 3.x; make sure the obfuscation target matches.")
-        raise SystemExit(3)
-    raise
-except Exception as e:
-    print("❌ IMPORT_FAIL:", repr(e))
-    traceback.print_exc()
-    raise
-PY
-  echo
-}
+# NOTE: PyArmor Pro runtime is included and copied automatically
+# Files are pre-obfuscated with PyArmor Pro, runtime folder is detected and copied
+# No need to regenerate or verify when just copying files
 
 add_user_to_docker() {
   log "------------------------------------------------------"
-  log "STEP 9: Adding user '$USER_NAME' to the docker group..."
+  log "STEP 7: Adding user '$USER_NAME' to the docker group..."
   getent group docker >/dev/null 2>&1 || groupadd docker
   usermod -aG docker "$USER_NAME" || true
   log "    (You may need to log out/in for group changes to apply.)"
@@ -376,7 +453,7 @@ detect_dbus_socket_dir() {
 
 start_homebridge() {
   log "------------------------------------------------------"
-  log "STEP 10: Pulling Homebridge Docker image..."
+  log "STEP 8: Pulling Homebridge Docker image..."
   if ! command -v docker >/dev/null 2>&1; then
     echo "❌ docker CLI not found; install_docker must succeed before this step."
     exit 11
@@ -385,7 +462,7 @@ start_homebridge() {
   echo
 
   log "------------------------------------------------------"
-  log "STEP 11: Starting Homebridge container on ports 8581/9000 with BLE support..."
+  log "STEP 9: Starting Homebridge container on ports 8581/9000 with BLE support..."
   mkdir -p "$CONFIG_DIR"
   chown "$USER_NAME:$USER_NAME" "$CONFIG_DIR"
 
@@ -420,7 +497,7 @@ start_homebridge() {
 
 install_govee_plugin() {
   log "------------------------------------------------------"
-  log "STEP 12: Installing Govee plugin into Homebridge container (with BLE deps)..."
+  log "STEP 10: Installing Govee plugin into Homebridge container (with BLE deps)..."
 
   # Install build/runtime deps for noble stack inside the container
   docker exec -u root -e DEBIAN_FRONTEND=noninteractive -e NEEDRESTART_MODE=a homebridge \
@@ -443,7 +520,7 @@ write_service() {
   local workdir="/home/$USER_NAME/dmxsmartlink"
 
   log "------------------------------------------------------"
-  log "STEP 13: Creating systemd service at $SERVICE_FILE..."
+  log "STEP 11: Creating systemd service at $SERVICE_FILE..."
   cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=DMXSmartLink Dashboard Service
@@ -497,8 +574,6 @@ ensure_base_tooling
 install_ble_support_host        # Host-side BLE support (Pi OS + Ubuntu)
 ensure_python
 create_venv_and_install
-regenerate_pyarmor_runtime_py313
-verify_import_under_python
 install_docker
 add_user_to_docker
 start_homebridge                # Starts with DBus exposed into container

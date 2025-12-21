@@ -73,7 +73,21 @@ detect_architecture() {
       echo "dist_ubuntu_m4"  # Default Apple Silicon
       return 0
     fi
-    # Default ARM (Raspberry Pi should have been caught above, but just in case)
+    # Check if it's Ubuntu (not Raspbian) - likely Apple Silicon VM
+    if [ -f /etc/os-release ]; then
+      local os_release_content=$(cat /etc/os-release | tr '[:upper:]' '[:lower:]')
+      if echo "$os_release_content" | grep -q "ubuntu" && ! echo "$os_release_content" | grep -q "raspbian\|raspberry"; then
+        # Ubuntu on ARM64 (not Raspbian) - likely Apple Silicon VM
+        # Try to detect M5 specifically, otherwise default to M4
+        if echo "$cpuinfo" | grep -q "m5"; then
+          echo "dist_ubuntu_m5"
+        else
+          echo "dist_ubuntu_m4"
+        fi
+        return 0
+      fi
+    fi
+    # Default ARM (Raspberry Pi should have been caught above)
     echo "dist_pi5"
     return 0
   fi
@@ -102,83 +116,156 @@ copy_project() {
   local DIST_DIR=$(detect_architecture)
   log "    Detected architecture, using GitHub directory: $DIST_DIR"
   
+  # Save the architecture to a file for future updates
+  echo "$DIST_DIR" > "$TARGET_DIR/.install_arch"
+  chown "$USER_NAME:$USER_NAME" "$TARGET_DIR/.install_arch"
+  
   # GitHub repository details
   local GITHUB_REPO="WhiteCrowSecurity/DMXSmartLink"
-  local GITHUB_BRANCH="main"
   local TEMP_DIR="/tmp/dmxsmartlink-src-$$"
   local ZIP_PATH="/tmp/dmxsmartlink-release-$$.zip"
 
   rm -rf "$TEMP_DIR" "$ZIP_PATH"
   mkdir -p "$TEMP_DIR"
 
-  log "    Fetching latest release zip (preferred)..."
+  log "    Fetching latest release zip..."
+  # Try /releases/latest first, then fallback to specific tag
   local API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
   local REL_JSON=""
+  local API_ERROR=""
+  
   if command -v curl >/dev/null 2>&1; then
-    REL_JSON="$(curl -fsSL "$API_URL" || true)"
+    REL_JSON="$(curl -fsSL "$API_URL" 2>&1)"
+    if [ $? -ne 0 ] || echo "$REL_JSON" | grep -q "404\|Not Found"; then
+      # Try specific tag as fallback
+      log "    Latest release not found, trying tag 'DMXSmartLink'..."
+      API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/tags/DMXSmartLink"
+      REL_JSON="$(curl -fsSL "$API_URL" 2>&1)"
+      if [ $? -ne 0 ] || echo "$REL_JSON" | grep -q "404\|Not Found"; then
+        API_ERROR="not_found"
+      fi
+    fi
   fi
 
   local DOWNLOAD_URL=""
-  if [[ -n "$REL_JSON" ]] && command -v python3 >/dev/null 2>&1; then
+  if [[ -z "$API_ERROR" ]] && [[ -n "$REL_JSON" ]] && command -v python3 >/dev/null 2>&1; then
     DOWNLOAD_URL="$(python3 - <<PY
 import json,sys
 try:
     d=json.loads(sys.stdin.read() or "{}")
+    if "message" in d:
+        sys.stderr.write(f"API Error: {d.get('message', 'Unknown error')}\n")
+        print("")
+        raise SystemExit(0)
     assets=d.get("assets") or []
-    # Prefer an asset named dmxsmartlink.zip if present
+    tag_name=d.get("tag_name", "")
+    if tag_name:
+        sys.stderr.write(f"Found release: {tag_name} with {len(assets)} asset(s)\n")
+    # Prefer an asset named dmxsmartlink.zip if present (case insensitive)
     for a in assets:
         u=a.get("browser_download_url","")
         n=a.get("name","").lower()
-        if n == "dmxsmartlink.zip":
+        if "dmxsmartlink" in n and n.endswith(".zip"):
             print(u); raise SystemExit(0)
     # Else first .zip asset
     for a in assets:
         u=a.get("browser_download_url","")
-        if u.endswith(".zip"):
+        n=a.get("name","")
+        if u.endswith(".zip") or n.endswith(".zip"):
+            sys.stderr.write(f"Using zip asset: {n}\n")
             print(u); raise SystemExit(0)
-    # Fallback to zipball_url
-    print(d.get("zipball_url",""))
-except Exception:
+    # Fallback to zipball_url (source code zip)
+    zipball=d.get("zipball_url","")
+    if zipball:
+        sys.stderr.write("Warning: No zip asset found, using source code zipball\n")
+        print(zipball)
+    else:
+        print("")
+except Exception as e:
+    sys.stderr.write(f"Error parsing release data: {e}\n")
     print("")
 PY
-<<<"$REL_JSON")"
+<<<"$REL_JSON" 2>&1)"
   fi
 
-  if [[ -n "$DOWNLOAD_URL" ]]; then
+  if [[ -n "$DOWNLOAD_URL" ]] && [[ "$DOWNLOAD_URL" != "" ]]; then
     log "    Downloading release: $DOWNLOAD_URL"
-    if curl -fL "$DOWNLOAD_URL" -o "$ZIP_PATH"; then
-      if unzip -q "$ZIP_PATH" -d "$TEMP_DIR"; then
+    if curl -fL "$DOWNLOAD_URL" -o "$ZIP_PATH" 2>/dev/null; then
+      if unzip -q "$ZIP_PATH" -d "$TEMP_DIR" 2>/dev/null; then
         local ROOT_DIR
         ROOT_DIR="$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
         if [[ -n "$ROOT_DIR" ]] && [[ -d "$ROOT_DIR/$DIST_DIR" ]]; then
           SRC_DIR="$ROOT_DIR/$DIST_DIR"
           log "    Using extracted release folder: $SRC_DIR"
         else
-          SRC_DIR=""
+          # Check if dist directory exists directly in extracted location (no root subdirectory)
+          if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
+            SRC_DIR="$TEMP_DIR/$DIST_DIR"
+            log "    Using extracted release folder (direct): $SRC_DIR"
+          else
+            log "    ⚠ Directory $DIST_DIR not found in extracted zip"
+            log "    Available directories: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
+            if [[ -n "$ROOT_DIR" ]]; then
+              log "    Root dir contents: $(ls -1 "$ROOT_DIR" 2>/dev/null | head -10 | tr '\n' ' ')"
+            fi
+            SRC_DIR=""
+          fi
         fi
+      else
+        log "    ⚠ Failed to extract zip file"
+        SRC_DIR=""
       fi
+    else
+      log "    ⚠ Failed to download zip file"
+      SRC_DIR=""
     fi
   fi
 
-  # Fallback: shallow clone if release download failed
+  # Fallback to direct download link if API lookup failed
   if [[ -z "${SRC_DIR:-}" ]]; then
-    log "    Release download failed; falling back to shallow git clone..."
-    if ! command -v git >/dev/null 2>&1; then
-      apt_update
-      apt_install git
+    log "    API lookup failed, trying direct download link..."
+    local DIRECT_URL="https://github.com/${GITHUB_REPO}/releases/download/DMXSmartLink/dmxsmartlink.zip"
+    if curl -fL "$DIRECT_URL" -o "$ZIP_PATH" 2>/dev/null; then
+      log "    ✓ Downloaded via direct link"
+      if unzip -q "$ZIP_PATH" -d "$TEMP_DIR" 2>/dev/null; then
+        local ROOT_DIR
+        ROOT_DIR="$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+        if [[ -n "$ROOT_DIR" ]] && [[ -d "$ROOT_DIR/$DIST_DIR" ]]; then
+          SRC_DIR="$ROOT_DIR/$DIST_DIR"
+          log "    Using extracted release folder: $SRC_DIR"
+        else
+          # Check if dist directory exists directly in extracted location (no root subdirectory)
+          if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
+            SRC_DIR="$TEMP_DIR/$DIST_DIR"
+            log "    Using extracted release folder (direct): $SRC_DIR"
+          else
+            log "    ⚠ Directory $DIST_DIR not found in extracted zip"
+            log "    Available directories: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
+            if [[ -n "$ROOT_DIR" ]]; then
+              log "    Root dir contents: $(ls -1 "$ROOT_DIR" 2>/dev/null | head -10 | tr '\n' ' ')"
+            fi
+            SRC_DIR=""
+          fi
+        fi
+      else
+        log "    ⚠ Failed to extract zip file"
+        SRC_DIR=""
+      fi
+    else
+      SRC_DIR=""
     fi
-    local GITHUB_URL="https://github.com/${GITHUB_REPO}.git"
-    if ! git clone --depth 1 --branch "$GITHUB_BRANCH" "$GITHUB_URL" "$TEMP_DIR/repo" 2>&1; then
-      log "❌ Failed to download repository (release + clone failed)."
-      rm -rf "$TEMP_DIR" "$ZIP_PATH"
-      exit 1
-    fi
-    if [[ ! -d "$TEMP_DIR/repo/$DIST_DIR" ]]; then
-      log "❌ Directory $DIST_DIR not found in repository"
-      rm -rf "$TEMP_DIR" "$ZIP_PATH"
-      exit 1
-    fi
-    SRC_DIR="$TEMP_DIR/repo/$DIST_DIR"
+  fi
+
+  # Final failure if still no source directory
+  if [[ -z "${SRC_DIR:-}" ]]; then
+    log "❌ Failed to download release zip."
+    log "    Tried GitHub API and direct download link:"
+    log "    https://github.com/${GITHUB_REPO}/releases/download/DMXSmartLink/dmxsmartlink.zip"
+    log "    Check: https://github.com/${GITHUB_REPO}/releases"
+    log "    Make sure the zip file is attached as an asset to the release."
+    log "    The zip should contain: dist_pi5/, dist_ubuntu_intel/, dist_ubuntu_m4/, etc."
+    rm -rf "$TEMP_DIR" "$ZIP_PATH"
+    exit 1
   fi
 
   log "    Copying files from $DIST_DIR into $TARGET_DIR..."
