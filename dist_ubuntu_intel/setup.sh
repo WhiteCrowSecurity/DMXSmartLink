@@ -270,7 +270,7 @@ PY
 
   log "    Copying files from $DIST_DIR into $TARGET_DIR..."
   local items=(
-    artnet_controller.py config.py device_inventory.py device_registry.py group_init.py group_manager.py main.py
+    artnet_controller.py config_loader.py device_inventory.py device_registry.py group_init.py group_manager.py main.py
     license_status.txt HOMEBRIDGE_LICENSE.txt LICENSE.txt README.txt
   )
   
@@ -549,6 +549,24 @@ EOF
   echo
 }
 
+configure_passwordless_sudo() {
+  log "------------------------------------------------------"
+  log "STEP 12: Configuring passwordless sudo for service restart..."
+  
+  local sudoers_entry="$USER_NAME ALL=(ALL) NOPASSWD: /bin/systemctl restart dmxsmartlink.service"
+  local sudoers_file="/etc/sudoers.d/dmxsmartlink-restart"
+  
+  # Check if entry already exists
+  if [ -f "$sudoers_file" ] && grep -qF "$sudoers_entry" "$sudoers_file" 2>/dev/null; then
+    log "    ✓ Passwordless sudo already configured"
+  else
+    echo "$sudoers_entry" > "$sudoers_file"
+    chmod 0440 "$sudoers_file"
+    log "    ✓ Passwordless sudo configured for: systemctl restart dmxsmartlink.service"
+  fi
+  echo
+}
+
 # ========================== MAIN ==========================
 log "✅ STEP 1: Detected script directory: $SCRIPT_DIR (user = $USER_NAME)"
 
@@ -579,6 +597,7 @@ add_user_to_docker
 start_homebridge                # Starts with DBus exposed into container
 install_govee_plugin            # Installs plugin + BLE deps + setcap inside container
 write_service
+configure_passwordless_sudo     # Allow service user to restart service without password
 
 log "✅ All steps complete."
 log "Service status (last 30 lines):"
