@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Config - DMXSmartLink Hub{% endblock %}
+
+{% block extra_styles %}
+
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <a href="{{ url_for('index') }}" class="back-link">← Back to Dashboard</a>
+    <h1>Manage Configuration (config.json)</h1>
+    
+
+    <div class="card">
+      <form id="configForm">
+        <div class="form-group">
+          <label for="LICENSE_KEY">LICENSE_KEY:</label>
+          <input type="text" id="LICENSE_KEY" value="{{ config_values.LICENSE_KEY }}">
+        </div>
+        
+        <div class="form-group">
+          <label for="LICENSE_SERVER_URL">LICENSE_SERVER_URL:</label>
+          <input type="text" id="LICENSE_SERVER_URL" value="{{ config_values.LICENSE_SERVER_URL }}">
+        </div>
+        
+        <div class="form-group">
+          <label for="DEVICE_JSON">DEVICE_JSON:</label>
+          <input type="text" id="DEVICE_JSON" value="{{ config_values.DEVICE_JSON }}">
+        </div>
+        
+        <div class="form-group">
+          <label for="GROUP_JSON">GROUP_JSON:</label>
+          <input type="text" id="GROUP_JSON" value="{{ config_values.GROUP_JSON }}">
+        </div>
+        
+        <div class="form-group">
+          <label for="ARTNET_PORT">ARTNET_PORT:</label>
+          <input type="number" id="ARTNET_PORT" value="{{ config_values.ARTNET_PORT }}">
+        </div>
+        
+        <div class="form-group">
+          <label for="HOMEBRIDGE_API_IP">HOMEBRIDGE_API_IP:</label>
+          <input type="text" id="HOMEBRIDGE_API_IP" value="{{ config_values.HOMEBRIDGE_API_IP }}">
+        </div>
+        
+        <div class="form-group">
+          <label for="HOMEBRIDGE_USERNAME">HOMEBRIDGE_USERNAME:</label>
+          <input type="text" id="HOMEBRIDGE_USERNAME" value="{{ config_values.HOMEBRIDGE_USERNAME }}">
+        </div>
+        
+        <div class="form-group">
+          <label for="HOMEBRIDGE_PASSWORD">HOMEBRIDGE_PASSWORD:</label>
+          <input type="password" id="HOMEBRIDGE_PASSWORD" value="{{ config_values.HOMEBRIDGE_PASSWORD }}">
+        </div>
+
+        <hr>
+        <h3 style="margin-top: 0;">Home Assistant (Optional <span style="color: #ef4444; font-weight: bold;">Experimental</span>)</h3>
+        <div class="form-group">
+          <label for="HA_ENABLED">HA_ENABLED (true/false):</label>
+          <input type="text" id="HA_ENABLED" value="{{ config_values.HA_ENABLED }}">
+        </div>
+        <div class="form-group">
+          <label for="HA_HOST">HA_HOST (IP or URL without path):</label>
+          <input type="text" id="HA_HOST" value="{{ config_values.HA_HOST }}">
+        </div>
+        <div class="form-group">
+          <label for="HA_PORT">HA_PORT:</label>
+          <input type="number" id="HA_PORT" value="{{ config_values.HA_PORT }}">
+        </div>
+        <div class="form-group">
+          <label for="HA_TOKEN">HA_TOKEN:</label>
+          <input type="password" id="HA_TOKEN" value="{{ config_values.HA_TOKEN }}">
+        </div>
+        <div class="form-group">
+          <label for="HA_TLS_VERIFY">HA_TLS_VERIFY (true/false):</label>
+          <input type="text" id="HA_TLS_VERIFY" value="{{ config_values.HA_TLS_VERIFY }}">
+        </div>
+
+        <hr>
+        <h3 style="margin-top: 0;">DMX USB Device Configuration</h3>
+        {% if dmx_usb_device_info and dmx_usb_device_info.connected %}
+        <div style="margin-bottom: 16px; padding: 12px; background-color: #1a1a1a; border-radius: 8px; border: 1px solid #3b3b3b;">
+          <div style="color: #a0a0a0; font-size: 0.85rem; line-height: 1.8;">
+            <div><strong style="color: #10b981;">✓ Device Detected:</strong> {{ dmx_usb_device_info.description or 'FTDI USB-to-DMX Device' }}</div>
+            {% if dmx_usb_device_info.manufacturer %}<div><strong>Manufacturer:</strong> {{ dmx_usb_device_info.manufacturer }}</div>{% endif %}
+            {% if dmx_usb_device_info.port %}<div><strong>Port:</strong> {{ dmx_usb_device_info.port }}</div>{% endif %}
+            <div><strong>Assigned Universe:</strong> {{ dmx_usb_device_info.universe }}</div>
+            {% if dmx_usb_device_info.vid_hex or dmx_usb_device_info.pid_hex %}<div><strong>USB ID:</strong> {% if dmx_usb_device_info.vid_hex %}VID: {{ dmx_usb_device_info.vid_hex }}{% endif %}{% if dmx_usb_device_info.vid_hex and dmx_usb_device_info.pid_hex %}, {% endif %}{% if dmx_usb_device_info.pid_hex %}PID: {{ dmx_usb_device_info.pid_hex }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% else %}
+        <div style="margin-bottom: 16px; padding: 12px; background-color: rgba(239, 68, 68, 0.15); border-radius: 8px; border: 1px solid #ef4444;">
+          <div style="color: #ff6b6b; font-size: 0.85rem;">
+            <strong>⚠ No USB-to-DMX device detected.</strong><br>
+            Supported devices: Enttec Open DMX USB, Enttec DMX USB Pro, DSD TECH SH-RS09B, and other FTDI-based Open DMX devices.
+          </div>
+        </div>
+        {% endif %}
+        <p style="color: #a0a0a0; font-size: 0.85rem; margin-bottom: 16px;">
+          Configure the USB-to-DMX device for input/output, refresh rate, and universe assignment. Changes require restarting the DMX USB listener.
+        </p>
+        <div class="form-group">
+          <label for="DMX_USB_MODE">Kind:</label>
+          <div style="display: flex; gap: 8px; margin-top: 8px;">
+            <button type="button" id="dmx_mode_output" class="dmx-mode-btn" style="flex: 1; padding: 10px; background: #3b3b3b; border: 2px solid #6366f1; border-radius: 6px; color: #ffffff; cursor: pointer; font-weight: 500;">
+              ↑ Output
+            </button>
+            <button type="button" id="dmx_mode_input" class="dmx-mode-btn" style="flex: 1; padding: 10px; background: #3b3b3b; border: 2px solid #3b3b3b; border-radius: 6px; color: #ffffff; cursor: pointer; font-weight: 500;">
+              ↓ Input
+            </button>
+            <button type="button" id="dmx_mode_both" class="dmx-mode-btn" style="flex: 1; padding: 10px; background: #3b3b3b; border: 2px solid #3b3b3b; border-radius: 6px; color: #ffffff; cursor: pointer; font-weight: 500;">
+              ↔ Both
+            </button>
+          </div>
+          <input type="hidden" id="DMX_USB_MODE" value="{{ config_values.get('DMX_USB_MODE', 'both') }}">
+        </div>
+        <div class="form-group">
+          <label for="DMX_USB_REFRESH_RATE_HZ">Refresh rate:</label>
+          <select id="DMX_USB_REFRESH_RATE_HZ" style="width: 100%;">
+            <option value="30" {% if config_values.get('DMX_USB_REFRESH_RATE_HZ', '40') == '30' %}selected{% endif %}>30 Hz</option>
+            <option value="32" {% if config_values.get('DMX_USB_REFRESH_RATE_HZ', '40') == '32' %}selected{% endif %}>32 Hz</option>
+            <option value="34" {% if config_values.get('DMX_USB_REFRESH_RATE_HZ', '40') == '34' %}selected{% endif %}>34 Hz</option>
+            <option value="36" {% if config_values.get('DMX_USB_REFRESH_RATE_HZ', '40') == '36' %}selected{% endif %}>36 Hz</option>
+            <option value="38" {% if config_values.get('DMX_USB_REFRESH_RATE_HZ', '40') == '38' %}selected{% endif %}>38 Hz</option>
+            <option value="40" {% if config_values.get('DMX_USB_REFRESH_RATE_HZ', '40') == '40' %}selected{% endif %}>40 Hz</option>
+            <option value="42" {% if config_values.get('DMX_USB_REFRESH_RATE_HZ', '40') == '42' %}selected{% endif %}>42 Hz</option>
+            <option value="44" {% if config_values.get('DMX_USB_REFRESH_RATE_HZ', '40') == '44' %}selected{% endif %}>44 Hz</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="DMX_USB_UNIVERSE">DMX USB Universe (1-32767):</label>
+          <input type="number" id="DMX_USB_UNIVERSE" value="{{ config_values.get('DMX_USB_UNIVERSE', '1') }}" min="1" max="32767">
+          <p style="color: #a0a0a0; font-size: 0.85rem; margin-top: 8px;">
+            Universe reserved for DMX fixtures. Groups cannot use this universe. Other universes are available for groups.
+          </p>
+        </div>
+
+        <div class="action-buttons">
+          <button type="button" onclick="updateConfig()" class="btn">Update Config</button>
+          <a href="{{ url_for('config_reset') }}" class="btn btn-secondary" onclick="return confirm('Are you sure you want to reset the config to default? This cannot be undone.');">Reset Config to Default</a>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Initialize DMX mode buttons
+    window.onload = function() {
+      var currentMode = document.getElementById('DMX_USB_MODE').value || 'both';
+      var modeButtons = {
+        'output': document.getElementById('dmx_mode_output'),
+        'input': document.getElementById('dmx_mode_input'),
+        'both': document.getElementById('dmx_mode_both')
+      };
+      
+      // Set initial active button
+      Object.keys(modeButtons).forEach(function(mode) {
+        var btn = modeButtons[mode];
+        if (mode === currentMode) {
+          btn.style.background = '#6366f1';
+          btn.style.borderColor = '#6366f1';
+        } else {
+          btn.style.background = '#3b3b3b';
+          btn.style.borderColor = '#3b3b3b';
+        }
+        
+        btn.onclick = function() {
+          // Update all buttons
+          Object.keys(modeButtons).forEach(function(m) {
+            modeButtons[m].style.background = '#3b3b3b';
+            modeButtons[m].style.borderColor = '#3b3b3b';
+          });
+          // Set selected button
+          this.style.background = '#6366f1';
+          this.style.borderColor = '#6366f1';
+          document.getElementById('DMX_USB_MODE').value = mode;
+        };
+      });
+    };
+    
+    function updateConfig() {
+      var params = [];
+      params.push('LICENSE_KEY=' + encodeURIComponent(document.getElementById('LICENSE_KEY').value));
+      params.push('LICENSE_SERVER_URL=' + encodeURIComponent(document.getElementById('LICENSE_SERVER_URL').value));
+      params.push('DEVICE_JSON=' + encodeURIComponent(document.getElementById('DEVICE_JSON').value));
+      params.push('GROUP_JSON=' + encodeURIComponent(document.getElementById('GROUP_JSON').value));
+      params.push('ARTNET_PORT=' + encodeURIComponent(document.getElementById('ARTNET_PORT').value));
+      params.push('HOMEBRIDGE_API_IP=' + encodeURIComponent(document.getElementById('HOMEBRIDGE_API_IP').value));
+      params.push('HOMEBRIDGE_USERNAME=' + encodeURIComponent(document.getElementById('HOMEBRIDGE_USERNAME').value));
+      params.push('HOMEBRIDGE_PASSWORD=' + encodeURIComponent(document.getElementById('HOMEBRIDGE_PASSWORD').value));
+      params.push('HA_ENABLED=' + encodeURIComponent(document.getElementById('HA_ENABLED').value));
+      params.push('HA_HOST=' + encodeURIComponent(document.getElementById('HA_HOST').value));
+      params.push('HA_PORT=' + encodeURIComponent(document.getElementById('HA_PORT').value));
+      params.push('HA_TOKEN=' + encodeURIComponent(document.getElementById('HA_TOKEN').value));
+      params.push('HA_TLS_VERIFY=' + encodeURIComponent(document.getElementById('HA_TLS_VERIFY').value));
+      params.push('DMX_USB_MODE=' + encodeURIComponent(document.getElementById('DMX_USB_MODE').value));
+      params.push('DMX_USB_REFRESH_RATE_HZ=' + encodeURIComponent(document.getElementById('DMX_USB_REFRESH_RATE_HZ').value));
+      params.push('DMX_USB_UNIVERSE=' + encodeURIComponent(document.getElementById('DMX_USB_UNIVERSE').value));
+      var url = '/config/update_link?' + params.join('&');
+      window.location.href = url;
+    }
+  </script>
+{% endblock %}

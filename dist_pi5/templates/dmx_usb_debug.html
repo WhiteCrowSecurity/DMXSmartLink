@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}DMX USB Debug - DMXSmartLink Hub{% endblock %}
+
+{% block extra_styles %}
+  <style>
+    .debug-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background-color: #2d2d2d;
+      border: 1px solid #3b3b3b;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .stat-label {
+      color: #a0a0a0;
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+    }
+    .stat-value {
+      color: #ffffff;
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+    .channel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+      gap: 4px;
+      max-height: 60vh;
+      overflow-y: auto;
+      padding: 8px;
+      background-color: #1a1a1a;
+      border: 1px solid #3b3b3b;
+      border-radius: 8px;
+    }
+    .channel-cell {
+      background-color: #2d2d2d;
+      border: 1px solid #3b3b3b;
+      border-radius: 4px;
+      padding: 6px 4px;
+      text-align: center;
+      font-size: 0.75rem;
+    }
+    .channel-cell.has-value {
+      background-color: #10b981;
+      color: #ffffff;
+      font-weight: 600;
+    }
+    .channel-number {
+      color: #a0a0a0;
+      font-size: 0.7rem;
+      margin-bottom: 2px;
+    }
+    .channel-value {
+      font-size: 0.85rem;
+    }
+    .section-title {
+      margin-top: 24px;
+      margin-bottom: 12px;
+      font-size: 1.2rem;
+      color: #ffffff;
+    }
+    .auto-refresh-toggle {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="container">
+    <a href="{{ url_for('index') }}" class="back-link">← Back to Dashboard</a>
+    <h1>DMX USB Debug (Universe {{ dmx_usb_universe }})</h1>
+    
+    <div class="card">
+      <div class="debug-stats" id="stats">
+        <div class="stat-card">
+          <div class="stat-label">Device Status</div>
+          <div class="stat-value" id="deviceStatus">Loading...</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Frames Sent (Output)</div>
+          <div class="stat-value" id="outputCount">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Frames Received (Input)</div>
+          <div class="stat-value" id="inputCount">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Last Output</div>
+          <div class="stat-value" id="lastOutput">Never</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Last Input</div>
+          <div class="stat-value" id="lastInput">Never</div>
+        </div>
+      </div>
+      
+      <div class="auto-refresh-toggle">
+        <label class="toggle-switch">
+          <input type="checkbox" id="autoRefresh" checked>
+          <span class="toggle-slider"></span>
+        </label>
+        <span style="color: #a0a0a0;">Auto-refresh (updates every 200ms)</span>
+        <button type="button" class="btn" onclick="refreshData()" style="margin-left: auto;">Refresh Now</button>
+      </div>
+    </div>
+    
+    <div class="card">
+      <h2 class="section-title">DMX Output (Sent to XLR Output Port) ↑</h2>
+      <p style="color: #a0a0a0; font-size: 0.85rem; margin-bottom: 12px;">
+        Channels with values > 0 are highlighted in green. Shows last frame sent to DMX output.
+      </p>
+      <div class="channel-grid" id="outputGrid">
+        Loading...
+      </div>
+    </div>
+    
+    <div class="card">
+      <h2 class="section-title">DMX Input (Received from XLR Input Port) ↓</h2>
+      <p style="color: #a0a0a0; font-size: 0.85rem; margin-bottom: 12px;">
+        Channels with values > 0 are highlighted in green. Shows last frame received from DMX input.
+      </p>
+      <div class="channel-grid" id="inputGrid">
+        Loading...
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script>
+    let refreshInterval = null;
+    
+    function formatTime(timestamp) {
+      if (!timestamp || timestamp === 0) return 'Never';
+      const now = Date.now() / 1000;
+      const diff = now - timestamp;
+      if (diff < 1) return 'Just now';
+      if (diff < 60) return Math.floor(diff) + 's ago';
+      if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+      return Math.floor(diff / 3600) + 'h ago';
+    }
+    
+    function renderChannelGrid(frame, containerId) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = '';
+      
+      for (let i = 1; i <= 512; i++) {
+        const value = frame[i - 1] || 0;
+        const cell = document.createElement('div');
+        cell.className = 'channel-cell' + (value > 0 ? ' has-value' : '');
+        cell.innerHTML = '<div class="channel-number">Ch ' + i + '</div><div class="channel-value">' + value + '</div>';
+        container.appendChild(cell);
+      }
+    }
+    
+    function refreshData() {
+      fetch('/api/dmx_usb_debug')
+        .then(response => response.json())
+        .then(data => {
+          // Update stats
+          document.getElementById('deviceStatus').textContent = data.connected ? 
+            (data.running ? 'Connected & Running' : 'Connected (Not Running)') : 'Not Connected';
+          document.getElementById('deviceStatus').style.color = data.connected && data.running ? '#10b981' : '#ef4444';
+          
+          document.getElementById('outputCount').textContent = data.output_count || 0;
+          document.getElementById('inputCount').textContent = data.input_count || 0;
+          document.getElementById('lastOutput').textContent = formatTime(data.last_output_time);
+          document.getElementById('lastInput').textContent = formatTime(data.last_input_time);
+          
+          // Render channel grids
+          renderChannelGrid(data.output_frame || Array(512).fill(0), 'outputGrid');
+          renderChannelGrid(data.input_frame || Array(512).fill(0), 'inputGrid');
+        })
+        .catch(err => {
+          console.error('Error fetching debug data:', err);
+        });
+    }
+    
+    function toggleAutoRefresh() {
+      const checkbox = document.getElementById('autoRefresh');
+      if (checkbox.checked) {
+        refreshInterval = setInterval(refreshData, 200);
+      } else {
+        if (refreshInterval) {
+          clearInterval(refreshInterval);
+          refreshInterval = null;
+        }
+      }
+    }
+    
+    document.getElementById('autoRefresh').addEventListener('change', toggleAutoRefresh);
+    
+    // Initial load
+    refreshData();
+    toggleAutoRefresh();
+  </script>
+{% endblock %}
+

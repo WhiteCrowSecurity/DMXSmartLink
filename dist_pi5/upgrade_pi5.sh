@@ -181,6 +181,7 @@ upgrade_files() {
   # Same file list as setup.sh (including config_loader.py and license_status.txt for reference)
   local items=(
     artnet_controller.py config_loader.py device_inventory.py device_registry.py group_init.py group_manager.py main.py
+    dmx_usb_controller.py visual_control_worker.py
     license_status.txt HOMEBRIDGE_LICENSE.txt LICENSE.txt README.txt
   )
   
@@ -283,13 +284,13 @@ update_python_deps() {
       python3 -m venv .venv
       source .venv/bin/activate
       pip install -U pip
-      pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core
+      pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial
     "
   else
     log "    Updating packages in existing virtual environment..."
     if [[ -f "$TARGET_DIR/.venv/bin/python" ]]; then
       "$TARGET_DIR/.venv/bin/python" -m pip install -U pip setuptools wheel >/dev/null 2>&1 || true
-      "$TARGET_DIR/.venv/bin/pip" install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core >/dev/null 2>&1 || true
+      "$TARGET_DIR/.venv/bin/pip" install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial >/dev/null 2>&1 || true
       log "    ✓ Dependencies updated"
     else
       log "    ⚠ Virtual environment python not found at $TARGET_DIR/.venv/bin/python"

@@ -1,0 +1,594 @@
+{% extends "base.html" %}
+
+{% block title %}Fixture Library - DMXSmartLink Hub{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .library-actions {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .fixture-library-item {
+      background-color: #2d2d2d;
+      border: 1px solid #3b3b3b;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .fixture-library-item-info {
+      flex: 1;
+      min-width: 200px;
+    }
+    .fixture-library-item-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .source-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+    .source-ofl {
+      background-color: #10b981;
+      color: white;
+    }
+    .source-custom {
+      background-color: #6366f1;
+      color: white;
+    }
+    .import-section {
+      background-color: #1a1a1a;
+      border: 2px dashed #6366f1;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    .import-textarea {
+      width: 100%;
+      min-height: 200px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85rem;
+      margin-top: 12px;
+      resize: vertical;
+    }
+    .search-filter {
+      margin-bottom: 20px;
+      flex: 1;
+    }
+    .search-filter input {
+      width: 100%;
+      padding: 10px 16px;
+      background-color: #2d2d2d;
+      border: 1px solid #3b3b3b;
+      border-radius: 6px;
+      color: #ffffff;
+      font-size: 0.9rem;
+      margin-bottom: 0;
+    }
+    .search-filter input:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <a href="{{ url_for('fixtures_view') }}" class="back-link">← Back to Fixtures</a>
+    <h1>Fixture Library</h1>
+    
+    <div class="library-actions">
+      <a href="{{ url_for('fixtures_view') }}" class="btn btn-secondary">Manage Fixture Instances</a>
+      <button type="button" onclick="syncAllOFLFixtures()" class="btn" id="syncAllBtn" style="padding: 12px 20px;">🔄 Sync All OFL Fixtures from GitHub</button>
+    </div>
+    
+    <div class="card">
+      <h2 style="margin-top: 0;">Sync OFL Fixtures</h2>
+      <div class="import-section" style="margin-bottom: 24px;">
+        <p style="color: #a0a0a0; margin-bottom: 12px;">
+          Click the button above to automatically download and import all fixtures from the Open Fixture Library GitHub repository.
+          This may take several minutes as there are hundreds of fixtures. Only new fixtures will be imported (existing ones are skipped).
+        </p>
+        <div id="syncStatus" style="margin-top: 12px;"></div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <h2 style="margin-top: 0;">Fixture Definitions</h2>
+      <div style="margin-bottom: 24px;">
+        <button type="button" onclick="deleteAllFixtures()" class="btn btn-danger" style="padding: 10px 20px; font-size: 0.9rem;">Delete All Fixtures</button>
+      </div>
+      <div style="margin-bottom: 16px;">
+        <div class="search-filter" style="width: 100%;">
+          <input type="text" id="searchInput" placeholder="Search by manufacturer, model, or source..." onkeyup="filterFixtures()" style="width: 100%;">
+        </div>
+      </div>
+      <div id="fixturesList">
+        <p style="color: #a0a0a0; text-align: center; padding: 40px 20px;">Loading fixtures...</p>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const SUPPORTED_CHANNEL_TYPES = ['red','green','blue','brightness','dimmer','color_temp','white','amber','uv','lime','cyan','magenta','yellow','color_preset','pan','tilt','rotation','strobe','shutter','gobo','zoom','focus','iris','prism','effect','effect_speed','effect_param','effect_duration','fog','haze','fog_speed','haze_speed','sound_sensitivity','maintenance','reset'];
+    
+    function getSupportedChannelTypes() {
+      return SUPPORTED_CHANNEL_TYPES;
+    }
+    
+    let allFixtures = [];
+    
+    function loadFixtures() {
+      fetch('/api/fixtures/library/list')
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            allFixtures = data.fixtures;
+            renderFixtures(allFixtures);
+          } else {
+            document.getElementById('fixturesList').innerHTML = '<p style="color: #ef4444;">Error loading fixtures: ' + (data.error || 'Unknown error') + '</p>';
+          }
+        })
+        .catch(err => {
+          console.error('Error:', err);
+          document.getElementById('fixturesList').innerHTML = '<p style="color: #ef4444;">Error loading fixtures. Please try again.</p>';
+        });
+    }
+    
+    function renderFixtures(fixtures) {
+      const container = document.getElementById('fixturesList');
+      if (fixtures.length === 0) {
+        container.innerHTML = '<p style="color: #a0a0a0; text-align: center; padding: 40px 20px;">No fixtures in library. Import an OFL fixture or create a custom one.</p>';
+        return;
+      }
+      
+      container.innerHTML = fixtures.map(fixture => {
+        const sourceClass = fixture.source === 'ofl' ? 'source-ofl' : 'source-custom';
+        const sourceLabel = fixture.source === 'ofl' ? 'OFL' : 'Custom';
+        
+        return `
+          <div class="fixture-library-item">
+            <div class="fixture-library-item-info">
+              <h3 style="margin: 0 0 8px 0; color: #ffffff;">
+                ${fixture.manufacturer} ${fixture.model}
+                <span class="source-badge ${sourceClass}">${sourceLabel}</span>
+              </h3>
+              <p style="color: #a0a0a0; margin: 4px 0; font-size: 0.9rem;">
+                ${fixture.channel_count} channel(s)
+                ${fixture.description ? ' | ' + fixture.description : ''}
+              </p>
+              <p style="color: #666; margin: 4px 0; font-size: 0.8rem;">
+                Key: ${fixture.key}
+              </p>
+            </div>
+            <div class="fixture-library-item-actions">
+              <button type="button" onclick="createFixtureFromLibrary('${fixture.key}')" class="btn" style="padding: 8px 16px; font-size: 0.85rem;">Create Fixture Instance</button>
+              <button type="button" onclick="editManufacturer('${fixture.key}', '${fixture.manufacturer.replace(/'/g, "\\'")}')" class="btn btn-secondary" style="padding: 8px 16px; font-size: 0.85rem;">Edit Manufacturer</button>
+              <button type="button" onclick="deleteFixture('${fixture.key}')" class="btn btn-danger" style="padding: 8px 16px; font-size: 0.85rem;">Delete</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+    
+    function filterFixtures() {
+      const searchText = document.getElementById('searchInput').value.toLowerCase();
+      const filtered = allFixtures.filter(f => {
+        return f.manufacturer.toLowerCase().includes(searchText) ||
+               f.model.toLowerCase().includes(searchText) ||
+               f.source.toLowerCase().includes(searchText) ||
+               (f.description && f.description.toLowerCase().includes(searchText));
+      });
+      renderFixtures(filtered);
+    }
+    
+    function createFixtureFromLibrary(libraryKey) {
+      // Get fixture definition and next available channel
+      fetch('/api/fixtures/library/prepare_patch/' + encodeURIComponent(libraryKey))
+        .then(response => response.json())
+        .then(data => {
+          if (!data.success) {
+            alert('Error: ' + (data.error || 'Failed to prepare fixture'));
+            return;
+          }
+          
+          const fixtureName = data.fixture_name;
+          const channelMapping = data.channel_mapping;
+          const nextChannel = data.next_channel;
+          
+          // Show modal/dialog for editing channels
+          showPatchFixtureDialog(fixtureName, channelMapping, nextChannel, libraryKey);
+        })
+        .catch(err => {
+          console.error('Error:', err);
+          alert('Error preparing fixture');
+        });
+    }
+    
+    function showPatchFixtureDialog(fixtureName, channelMapping, startChannel, libraryKey) {
+      // Create modal overlay
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; align-items: center; justify-content: center;';
+      overlay.id = 'patchFixtureOverlay';
+      
+      // Close on overlay click (outside modal)
+      overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+          overlay.remove();
+        }
+      });
+      
+      // Create modal content
+      const modal = document.createElement('div');
+      modal.id = 'patchFixtureModal';
+      modal.style.cssText = 'background: #2d2d2d; border-radius: 12px; padding: 24px; max-width: 800px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.5);';
+      modal.addEventListener('click', function(e) {
+        e.stopPropagation(); // Prevent closing when clicking inside modal
+      });
+      
+      // Adjust channels to start from next available slot
+      let currentChannel = startChannel;
+      const adjustedMapping = channelMapping.map(ch => {
+        const adjusted = {...ch, channel: currentChannel};
+        currentChannel++;
+        return adjusted;
+      });
+      
+      let tempMapping = JSON.parse(JSON.stringify(adjustedMapping));
+      
+      modal.innerHTML = `
+        <h2 style="margin: 0 0 20px 0; color: #ffffff;">Create Fixture: ${fixtureName}</h2>
+        <p style="color: #a0a0a0; margin-bottom: 20px;">Edit channel assignments below. Channels start at ${startChannel}.</p>
+        <div id="patchChannelMappingList" style="margin-bottom: 20px;"></div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+          <button type="button" id="cancelPatchBtn" class="btn btn-secondary">Cancel</button>
+          <button type="button" id="confirmPatchBtn" class="btn">Confirm & Create</button>
+        </div>
+      `;
+      
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+      
+      // Render channel mapping
+      const listContainer = modal.querySelector('#patchChannelMappingList');
+      tempMapping.forEach((ch, idx) => {
+        const item = document.createElement('div');
+        item.style.cssText = 'display: flex; gap: 12px; align-items: center; padding: 12px; background: #1a1a1a; border-radius: 8px; margin-bottom: 8px;';
+        item.innerHTML = `
+          <label style="min-width: 80px; color: #a0a0a0;">Channel:</label>
+          <input type="number" value="${ch.channel}" min="1" max="512" style="width: 100px; padding: 8px; background: #2d2d2d; border: 1px solid #3b3b3b; border-radius: 6px; color: #ffffff;" class="patch-ch-input-channel">
+          <label style="min-width: 80px; color: #a0a0a0;">Type:</label>
+          <select style="flex: 1; padding: 8px; background: #2d2d2d; border: 1px solid #3b3b3b; border-radius: 6px; color: #ffffff;" class="patch-ch-select-type">
+            ${getSupportedChannelTypes().map(t => 
+              `<option value="${t}" ${ch.type === t ? 'selected' : ''}>${t}</option>`
+            ).join('')}
+          </select>
+          <label style="min-width: 50px; color: #a0a0a0;">Min:</label>
+          <input type="number" value="${ch.min || 0}" min="0" max="255" style="width: 80px; padding: 8px; background: #2d2d2d; border: 1px solid #3b3b3b; border-radius: 6px; color: #ffffff;" class="patch-ch-input-min">
+          <label style="min-width: 50px; color: #a0a0a0;">Max:</label>
+          <input type="number" value="${ch.max || 255}" min="0" max="255" style="width: 80px; padding: 8px; background: #2d2d2d; border: 1px solid #3b3b3b; border-radius: 6px; color: #ffffff;" class="patch-ch-input-max">
+        `;
+        listContainer.appendChild(item);
+      });
+      
+      // Store library key and fixture name in overlay for confirm function
+      overlay.dataset.libraryKey = libraryKey;
+      overlay.dataset.fixtureName = fixtureName;
+      
+      // Add event listeners to buttons
+      const cancelBtn = modal.querySelector('#cancelPatchBtn');
+      const confirmBtn = modal.querySelector('#confirmPatchBtn');
+      
+      cancelBtn.addEventListener('click', function() {
+        overlay.remove();
+      });
+      
+      confirmBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          confirmPatchFixture(libraryKey, fixtureName, overlay);
+        } catch (err) {
+          console.error('Error in confirmPatchFixture:', err);
+          alert('Error: ' + err.message);
+        }
+      });
+    }
+    
+    function confirmPatchFixture(libraryKey, fixtureName, overlayElement) {
+      try {
+        // Use passed overlay element or try to find it
+        const overlay = overlayElement || document.getElementById('patchFixtureOverlay');
+        if (!overlay) {
+          alert('Error: Modal overlay not found. Please refresh the page and try again.');
+          console.error('Overlay not found');
+          return;
+        }
+        
+        const modal = overlay.querySelector('#patchFixtureModal');
+        if (!modal) {
+          alert('Error: Modal content not found. Please refresh the page and try again.');
+          console.error('Modal not found');
+          return;
+        }
+        
+        const items = modal.querySelectorAll('#patchChannelMappingList > div');
+        if (!items || items.length === 0) {
+          alert('Error: No channel mappings found. Please add at least one channel.');
+          return;
+        }
+        
+        const channelMapping = [];
+        const channels = new Set();
+        let validationError = null;
+        
+        items.forEach(item => {
+          if (validationError) return; // Skip if we already found an error
+          
+          const channelInput = item.querySelector('.patch-ch-input-channel');
+          const typeSelect = item.querySelector('.patch-ch-select-type');
+          const minInput = item.querySelector('.patch-ch-input-min');
+          const maxInput = item.querySelector('.patch-ch-input-max');
+          
+          if (!channelInput || !typeSelect || !minInput || !maxInput) {
+            validationError = 'One or more channel fields are missing.';
+            return;
+          }
+          
+          const channel = parseInt(channelInput.value);
+          const type = typeSelect.value;
+          const min = parseInt(minInput.value) || 0;
+          const max = parseInt(maxInput.value) || 255;
+          
+          if (isNaN(channel) || channel < 1 || channel > 512) {
+            validationError = 'Each channel must be between 1 and 512.';
+            return;
+          }
+          
+          if (channels.has(channel)) {
+            validationError = 'Channel ' + channel + ' is used more than once. Each channel can only be used once per fixture.';
+            return;
+          }
+          channels.add(channel);
+          
+          if (min > max) {
+            validationError = 'Channel ' + channel + ': Min cannot be greater than Max.';
+            return;
+          }
+          
+          channelMapping.push({channel, type, min, max});
+        });
+        
+        if (validationError) {
+          alert(validationError);
+          return;
+        }
+        
+        if (channelMapping.length === 0) {
+          alert('Please add at least one channel mapping.');
+          return;
+        }
+        
+        // Sort by channel number
+        channelMapping.sort((a, b) => a.channel - b.channel);
+        
+        // Disable button to prevent double-clicking
+        const confirmBtn = modal.querySelector('#confirmPatchBtn');
+        if (confirmBtn) {
+          confirmBtn.disabled = true;
+          confirmBtn.textContent = 'Creating...';
+        }
+        
+        // Create fixture
+        fetch('/api/fixtures/create_from_library', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            fixture_name: fixtureName,
+            library_key: libraryKey,
+            channel_mapping: channelMapping
+          })
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Network response was not ok: ' + response.status);
+          }
+          return response.json();
+        })
+        .then(data => {
+          if (data.success) {
+            overlay.remove();
+            alert('Fixture instance created successfully!');
+            window.location.href = '/fixtures';
+          } else {
+            alert('Error: ' + (data.error || 'Failed to create fixture instance'));
+            if (confirmBtn) {
+              confirmBtn.disabled = false;
+              confirmBtn.textContent = 'Confirm & Create';
+            }
+          }
+        })
+        .catch(err => {
+          console.error('Error creating fixture:', err);
+          alert('Error creating fixture instance: ' + err.message);
+          if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Confirm & Create';
+          }
+        });
+      } catch (err) {
+        console.error('Unexpected error in confirmPatchFixture:', err);
+        alert('Unexpected error: ' + err.message);
+      }
+    }
+    
+    function deleteFixture(fixtureKey) {
+      if (!confirm('Are you sure you want to delete this fixture definition? This will not delete fixture instances created from it.')) {
+        return;
+      }
+      
+      fetch('/api/fixtures/library/delete/' + encodeURIComponent(fixtureKey), {
+        method: 'POST'
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          loadFixtures(); // Reload list
+        } else {
+          alert('Error: ' + (data.error || 'Failed to delete fixture'));
+        }
+      })
+      .catch(err => {
+        console.error('Error:', err);
+        alert('Error deleting fixture');
+      });
+    }
+    
+    function deleteAllFixtures() {
+      if (!confirm('Are you sure you want to delete ALL fixture definitions? This will not delete fixture instances, but you will need to re-import fixture definitions. This action cannot be undone.')) {
+        return;
+      }
+      
+      if (!confirm('This will delete all fixture definitions. Are you absolutely sure?')) {
+        return;
+      }
+      
+      fetch('/api/fixtures/library/delete_all', {
+        method: 'POST'
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert('All fixtures deleted successfully.');
+          loadFixtures(); // Reload list
+        } else {
+          alert('Error: ' + (data.error || 'Failed to delete all fixtures'));
+        }
+      })
+      .catch(err => {
+        console.error('Error:', err);
+        alert('Error deleting all fixtures');
+      });
+    }
+    
+    function editManufacturer(fixtureKey, currentManufacturer) {
+      const manufacturerKey = prompt('Enter manufacturer key (e.g., generic, chauvet, etc.):');
+      if (!manufacturerKey) return;
+      
+      const manufacturerName = prompt('Enter manufacturer name (e.g., Generic, Chauvet, etc.):', currentManufacturer);
+      if (!manufacturerName) return;
+      
+      fetch('/api/fixtures/library/update_manufacturer', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          fixture_key: fixtureKey,
+          manufacturer_key: manufacturerKey,
+          manufacturer_name: manufacturerName
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          loadFixtures(); // Reload list
+        } else {
+          alert('Error: ' + (data.error || 'Failed to update manufacturer'));
+        }
+      })
+      .catch(err => {
+        console.error('Error:', err);
+        alert('Error updating manufacturer');
+      });
+    }
+    
+    function syncAllOFLFixtures() {
+      if (!confirm('This will download and import ALL fixtures from the OFL GitHub repository. This may take several minutes as there are hundreds of fixtures. Continue?')) {
+        return;
+      }
+      
+      const btn = document.getElementById('syncAllBtn');
+      const statusDiv = document.getElementById('syncStatus');
+      btn.disabled = true;
+      btn.textContent = 'Syncing... (Please wait)';
+      statusDiv.innerHTML = '<p style="color: #6366f1;">Starting sync... Fetching fixture list from GitHub...</p>';
+      
+      fetch('/api/fixtures/library/sync_all_from_github', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        timeout: 300000 // 5 minute timeout
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(data => {
+            throw new Error(data.error || 'Sync failed');
+          });
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (data.success) {
+          const imported = data.imported || 0;
+          const skipped = data.skipped || 0;
+          const failed = data.failed || 0;
+          const totalAvailable = data.total_available || 0;
+          const failedFixtures = data.failed_fixtures || [];
+          
+          let statusHtml = `
+            <p style="color: #10b981;">✓ Sync complete!</p>
+            <p style="color: #a0a0a0; margin-top: 8px;">
+              Imported: ${imported} | Skipped: ${skipped} | Failed: ${failed} | Total available: ${totalAvailable}
+            </p>
+          `;
+          
+          if (failedFixtures.length > 0) {
+            statusHtml += `
+              <div style="margin-top: 16px; padding: 12px; background: #2d2d2d; border: 1px solid #3b3b3b; border-radius: 6px; max-height: 400px; overflow-y: auto;">
+                <p style="color: #ef4444; font-weight: bold; margin-bottom: 8px;">Failed Fixtures (${failedFixtures.length}):</p>
+                <div style="font-family: monospace; font-size: 0.85rem; color: #a0a0a0;">
+            `;
+            failedFixtures.forEach(f => {
+              statusHtml += `<div style="margin-bottom: 8px; padding: 8px; background: #1a1a1a; border-radius: 4px;">`;
+              statusHtml += `<div style="color: #ef4444; font-weight: bold; margin-bottom: 4px;">${f.fixture}: ${f.error}</div>`;
+              if (f.debug) {
+                statusHtml += `<div style="color: #6366f1; margin-top: 4px; padding-left: 12px; border-left: 2px solid #6366f1; white-space: pre-wrap; font-size: 0.8rem;">${f.debug}</div>`;
+              }
+              statusHtml += `</div>`;
+            });
+            statusHtml += `</div></div>`;
+          }
+          
+          statusDiv.innerHTML = statusHtml;
+          loadFixtures(); // Reload fixture list
+        } else {
+          statusDiv.innerHTML = '<p style="color: #ef4444;">Error: ' + (data.error || 'Unknown error') + '</p>';
+        }
+        btn.disabled = false;
+        btn.textContent = '🔄 Sync All OFL Fixtures from GitHub';
+      })
+      .catch(err => {
+        console.error('Error:', err);
+        statusDiv.innerHTML = '<p style="color: #ef4444;">Error during sync: ' + err.message + '</p>';
+        btn.disabled = false;
+        btn.textContent = '🔄 Sync All OFL Fixtures from GitHub';
+      });
+    }
+    
+    // Load fixtures on page load
+    window.onload = loadFixtures;
+  </script>
+{% endblock %}
