@@ -271,6 +271,7 @@ PY
   log "    Copying files from $DIST_DIR into $TARGET_DIR..."
   local items=(
     artnet_controller.py config_loader.py device_inventory.py device_registry.py group_init.py group_manager.py main.py
+    dmx_usb_controller.py visual_control_worker.py
     license_status.txt HOMEBRIDGE_LICENSE.txt LICENSE.txt README.txt
   )
   
@@ -421,7 +422,7 @@ create_venv_and_install() {
     '$PYTHON_BIN' -m venv .venv
     source .venv/bin/activate
     pip install -U pip
-    pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core
+    pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial
   "
   echo
 }

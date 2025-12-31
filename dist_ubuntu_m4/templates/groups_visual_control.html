@@ -1,0 +1,3526 @@
+{% extends "base.html" %}
+
+{% block title %}Visual Control - DMXSmartLink Hub{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .visual-control-container {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 40px);
+      gap: 16px;
+    }
+    .control-panel {
+      background-color: #2d2d2d;
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+    .canvas-main-area {
+      display: flex;
+      gap: 16px;
+      flex: 1;
+      min-height: 400px;
+    }
+    .canvas-container {
+      flex: 1;
+      background-color: #1a1a1a;
+      border-radius: 12px;
+      padding: 20px;
+      position: relative;
+      overflow: auto;
+      min-height: 400px;
+    }
+    .stage-sidebar {
+      width: 280px;
+      background-color: #2d2d2d;
+      border-radius: 12px;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .stage-sidebar h3 {
+      margin: 0 0 12px 0;
+      font-size: 1rem;
+      color: #ffffff;
+      border-bottom: 1px solid #3b3b3b;
+      padding-bottom: 8px;
+    }
+    .stage-shapes-library {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .stage-shape-item {
+      background: #1a1a1a;
+      border: 2px solid #3b3b3b;
+      border-radius: 6px;
+      padding: 8px;
+      cursor: grab;
+      text-align: center;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 50px;
+    }
+    .stage-shape-item:active {
+      cursor: grabbing;
+    }
+    .stage-shape-item:hover {
+      border-color: #6366f1;
+      background: #252525;
+      transform: translateY(-2px);
+    }
+    .stage-shape-item.active {
+      border-color: #6366f1;
+      background: rgba(99, 102, 241, 0.2);
+    }
+    .stage-shape-item .shape-icon {
+      width: 32px;
+      height: 32px;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .stage-shape-item .shape-icon svg {
+      width: 100%;
+      height: 100%;
+    }
+    .stage-shape-item .shape-label {
+      font-size: 0.75rem;
+      color: #a0a0a0;
+    }
+    .stage-images-library {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .stage-image-item {
+      position: relative;
+      background: #1a1a1a;
+      border: 2px solid #3b3b3b;
+      border-radius: 6px;
+      overflow: hidden;
+      cursor: grab;
+      transition: all 0.2s ease;
+    }
+    .stage-image-item:active {
+      cursor: grabbing;
+    }
+    .stage-image-item:hover {
+      border-color: #6366f1;
+    }
+    .stage-image-item.selected {
+      border-color: #10b981;
+      border-width: 3px;
+    }
+    .stage-image-item img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .stage-image-item .image-name {
+      padding: 6px 8px;
+      font-size: 0.75rem;
+      color: #a0a0a0;
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .stage-image-item-delete {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 24px;
+      height: 24px;
+      background: #ef4444;
+      color: white;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      z-index: 10;
+      padding: 0;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .stage-image-item:hover .stage-image-item-delete {
+      opacity: 1;
+    }
+    .stage-image-item-delete:hover {
+      background: #dc2626;
+      transform: scale(1.1);
+    }
+    .stage-upload-btn {
+      width: 100%;
+      padding: 10px;
+      background: #3b3b3b;
+      border: 2px dashed #6366f1;
+      border-radius: 6px;
+      color: #ffffff;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s ease;
+      font-size: 0.85rem;
+    }
+    .stage-upload-btn:hover {
+      background: #6366f1;
+      border-color: #4f46e5;
+    }
+    .fixture-canvas {
+      position: relative;
+      width: 100%;
+      min-height: 100%;
+      background: repeating-linear-gradient(
+        0deg,
+        #252525,
+        #252525 20px,
+        #2a2a2a 20px,
+        #2a2a2a 40px
+      ),
+      repeating-linear-gradient(
+        90deg,
+        #252525,
+        #252525 20px,
+        #2a2a2a 20px,
+        #2a2a2a 40px
+      );
+      background-size: 100% 40px, 40px 100%;
+    }
+    .stage-layout-toolbar {
+      background-color: #2d2d2d;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .stage-tool-btn {
+      padding: 8px 12px;
+      background: #3b3b3b;
+      border: 1px solid #6366f1;
+      border-radius: 6px;
+      color: #ffffff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 0.85rem;
+      white-space: nowrap;
+    }
+    .stage-tool-btn:hover {
+      background: #6366f1;
+    }
+    .stage-tool-btn.active {
+      background: #6366f1;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5);
+    }
+    .stage-elements-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .stage-element {
+      position: absolute;
+      pointer-events: auto;
+      cursor: move;
+      user-select: none;
+    }
+    .stage-element.selected {
+      outline: 2px solid #10b981;
+      outline-offset: 2px;
+    }
+    .stage-element.dragging {
+      opacity: 0.7;
+      z-index: 1000;
+    }
+    .stage-element-delete-btn {
+      position: absolute;
+      top: -12px;
+      right: -12px;
+      width: 24px;
+      height: 24px;
+      background: #ef4444;
+      color: white;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      z-index: 1001;
+      padding: 0;
+    }
+    .stage-element.selected .stage-element-delete-btn {
+      display: flex;
+    }
+    .stage-element-delete-btn:hover {
+      background: #dc2626;
+      transform: scale(1.1);
+    }
+    .stage-rectangle {
+      border: 2px solid #6366f1;
+      background: rgba(99, 102, 241, 0.1);
+    }
+    .stage-line {
+      border-top: 2px solid #6366f1;
+      height: 0;
+    }
+    .stage-icon {
+      width: 50px;
+      height: 50px;
+      background: #ffffff;
+      border: 2px solid #6366f1;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .stage-icon svg {
+      width: 100%;
+      height: 100%;
+    }
+    .stage-image-element {
+      border: 2px solid #6366f1;
+      border-radius: 4px;
+      overflow: hidden;
+      background: #1a1a1a;
+    }
+    .stage-image-element.selected {
+      border-color: #10b981;
+    }
+    .stage-element-resize-handle {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      background: #6366f1;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      cursor: nwse-resize;
+      pointer-events: auto;
+      z-index: 1002;
+      display: none;
+    }
+    .stage-element.selected .stage-element-resize-handle {
+      display: block;
+    }
+    .stage-element-resize-handle.se {
+      bottom: -6px;
+      right: -6px;
+      cursor: nwse-resize;
+    }
+    .stage-element-resize-handle.ne {
+      top: -6px;
+      right: -6px;
+      cursor: nesw-resize;
+    }
+    .stage-element-resize-handle.sw {
+      bottom: -6px;
+      left: -6px;
+      cursor: nesw-resize;
+    }
+    .stage-element-resize-handle.nw {
+      top: -6px;
+      left: -6px;
+      cursor: nwse-resize;
+    }
+    .fixtures-layer {
+      position: relative;
+      z-index: 10;
+    }
+    .fixture {
+      position: absolute;
+      width: 120px;
+      height: 80px;
+      background: linear-gradient(135deg, #3b3b3b 0%, #2d2d2d 100%);
+      border: 2px solid #6366f1;
+      border-radius: 8px;
+      cursor: move;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    .fixture:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+    }
+    .fixture.selected {
+      border-color: #10b981;
+      background: linear-gradient(135deg, #3b3b3b 0%, #2d2d2d 100%);
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3);
+    }
+    .fixture.dragging {
+      opacity: 0.8;
+      z-index: 1000;
+    }
+    .fixture-group {
+      border-color: #6366f1;
+    }
+    .fixture-dmx {
+      border-color: #f59e0b;
+    }
+    .fixture-dmx.selected {
+      border-color: #10b981;
+    }
+    .fixture-label {
+      font-weight: 600;
+      font-size: 0.85rem;
+      color: #ffffff;
+      text-align: center;
+      margin-bottom: 4px;
+      word-break: break-word;
+    }
+    .fixture-info {
+      font-size: 0.7rem;
+      color: #a0a0a0;
+      text-align: center;
+    }
+    .control-section {
+      background-color: #1a1a1a;
+      border-radius: 8px;
+      padding: 16px;
+      min-width: 200px;
+      flex: 0 0 auto;
+    }
+    .control-section h3 {
+      margin-top: 0;
+      margin-bottom: 16px;
+      font-size: 1rem;
+      color: #ffffff;
+    }
+    .color-picker-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .quick-color-buttons {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+    .quick-color-btn {
+      width: 100%;
+      height: 32px;
+      border: 2px solid #3b3b3b;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+    .quick-color-btn:hover {
+      transform: scale(1.05);
+      border-color: #6366f1;
+      box-shadow: 0 4px 8px rgba(99, 102, 241, 0.4);
+    }
+    .color-wheel-container {
+      position: relative;
+      width: 200px;
+      height: 200px;
+      margin: 0 auto;
+    }
+    .color-wheel-canvas {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      cursor: crosshair;
+      border: 2px solid #3b3b3b;
+    }
+    .slider-container {
+      margin: 16px 0;
+    }
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      color: #a0a0a0;
+      font-size: 0.9rem;
+    }
+    .slider {
+      width: 100%;
+      height: 8px;
+      border-radius: 4px;
+      background: #3b3b3b;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    .slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #6366f1;
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+    .slider::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #6366f1;
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+    .power-button {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      border: none;
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+    }
+    .power-button.on {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+    }
+    .power-button:hover {
+      transform: scale(1.1);
+    }
+    .effects-section {
+      background-color: #1a1a1a;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+    .effect-button {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      background: #3b3b3b;
+      border: 1px solid #6366f1;
+      border-radius: 6px;
+      color: #ffffff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .effect-button:hover {
+      background: #6366f1;
+    }
+    .effect-button.active {
+      background: #6366f1;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5);
+    }
+    .radio-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 12px 0;
+    }
+    .radio-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      background-color: #252525;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .radio-option:hover {
+      background-color: #2d2d2d;
+    }
+    .radio-option input[type="radio"] {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      cursor: pointer;
+      accent-color: #6366f1;
+    }
+    .radio-option label {
+      cursor: pointer;
+      margin: 0;
+      flex: 1;
+      color: #ffffff;
+      font-size: 0.9rem;
+    }
+    .radio-option.selected {
+      background-color: #3b3b3b;
+      border: 1px solid #6366f1;
+    }
+    .program-select {
+      width: 100%;
+      padding: 10px;
+      margin: 12px 0;
+      background-color: #2d2d2d;
+      border: 1px solid #3b3b3b;
+      border-radius: 6px;
+      color: #ffffff;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .program-select:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    .program-select option {
+      background-color: #2d2d2d;
+      color: #ffffff;
+    }
+    .program-select-indicator {
+      transition: all 0.2s ease;
+    }
+    .program-select-indicator:hover {
+      border-color: #818cf8;
+      transform: scale(1.1);
+    }
+    .program-select-indicator[data-selected="true"] {
+      background-color: #6366f1 !important;
+    }
+    .program-name-select {
+      appearance: auto;
+      -webkit-appearance: menulist;
+      -moz-appearance: menulist;
+    }
+    .program-name-select optgroup {
+      font-weight: 600;
+      color: #6366f1;
+      background-color: #1a1a1a;
+    }
+    .program-name-select option {
+      background-color: #2d2d2d;
+      color: #ffffff;
+      padding: 4px 8px;
+    }
+    .program-name-select option:checked {
+      background-color: #6366f1;
+    }
+    .stage-tools-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .stage-tool-btn-compact {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 8px 6px;
+      background: #3b3b3b;
+      border: 1px solid #6366f1;
+      border-radius: 6px;
+      color: #ffffff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 0.75rem;
+      min-height: 50px;
+    }
+    .stage-tool-btn-compact:hover {
+      background: #6366f1;
+      transform: translateY(-1px);
+    }
+    .stage-tool-btn-compact.active {
+      background: #6366f1;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5);
+    }
+    .stage-tool-btn-compact svg {
+      width: 20px;
+      height: 20px;
+    }
+    .stage-shape-item {
+      background: #1a1a1a;
+      border: 2px solid #3b3b3b;
+      border-radius: 6px;
+      padding: 12px;
+      cursor: grab;
+      text-align: center;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 60px;
+    }
+    .stage-shape-item:active {
+      cursor: grabbing;
+    }
+    @media (max-width: 768px) {
+      .visual-control-container {
+        height: auto;
+      }
+      .warning-box {
+        padding-right: 45px !important;
+      }
+      #dismissWarningBtn {
+        position: absolute !important;
+        top: 4px !important;
+        right: 4px !important;
+        left: auto !important;
+        font-size: 32px !important;
+        min-width: 40px !important;
+        min-height: 40px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        float: none !important;
+        width: auto !important;
+        height: auto !important;
+        transform: none !important;
+      }
+      .control-panel {
+        flex-direction: row;
+        flex-wrap: wrap;
+        padding: 12px;
+        gap: 12px;
+      }
+      .control-section {
+        min-width: calc(50% - 6px);
+        padding: 12px;
+        flex: 1 1 calc(50% - 6px);
+      }
+      .control-section h3 {
+        font-size: 0.9rem;
+        margin-bottom: 10px;
+      }
+      .color-wheel-container {
+        width: 140px;
+        height: 140px;
+      }
+      .color-wheel-canvas {
+        width: 140px;
+        height: 140px;
+      }
+      .power-button {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+      }
+      .slider-container {
+        margin: 10px 0;
+      }
+      .slider-label {
+        font-size: 0.8rem;
+      }
+      .effect-button {
+        padding: 8px;
+        font-size: 0.85rem;
+        margin: 4px 0;
+      }
+      .quick-color-buttons {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 4px;
+      }
+      .quick-color-btn {
+        height: 28px;
+      }
+      .canvas-main-area {
+        flex-direction: column;
+      }
+      .canvas-container {
+        min-height: 250px;
+        padding: 12px;
+      }
+      .stage-shapes-library {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 4px;
+      }
+      .stage-shape-item {
+        padding: 6px;
+        min-height: 45px;
+      }
+      .stage-shape-item .shape-icon {
+        width: 24px;
+        height: 24px;
+      }
+      .stage-shape-item .shape-label {
+        font-size: 0.7rem;
+      }
+      .stage-images-library {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+        max-height: 150px;
+      }
+      .stage-tools-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 4px;
+      }
+      .stage-tool-btn-compact {
+        min-height: 45px;
+        padding: 6px 4px;
+        font-size: 0.7rem;
+      }
+      .stage-tool-btn-compact svg {
+        width: 18px;
+        height: 18px;
+      }
+      .fixture {
+        width: 90px;
+        height: 60px;
+        font-size: 0.7rem;
+        padding: 6px;
+      }
+      .fixture-label {
+        font-size: 0.75rem;
+      }
+      .fixture-info {
+        font-size: 0.65rem;
+      }
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <a href="{{ url_for('groups_view') }}" class="back-link">← Back to Groups</a>
+    <h1>Visual Control</h1>
+    
+    <div id="visualControlWarning" class="warning-box" style="margin-bottom: 20px; padding-right: 50px;">
+      <button id="dismissWarningBtn" onclick="dismissWarning()" title="Dismiss">×</button>
+      <strong>⚠️ Important:</strong> Before using Visual Control, make sure you have:
+      <ol style="margin: 12px 0 0 20px; padding: 0;">
+        <li>Created groups in "Manage Groups"</li>
+        <li>Added devices to your groups</li>
+        <li>Selected the groups you want to control by clicking on the fixture icons below</li>
+      </ol>
+    </div>
+    
+    <div class="visual-control-container">
+      <div class="control-panel">
+        <div class="control-section" data-capability="power" style="display: none;">
+          <h3>Power</h3>
+          <button id="powerBtn" class="power-button" onclick="togglePower()">⚡</button>
+        </div>
+        
+        <div class="control-section" data-capability="color" style="display: none;">
+          <h3>Quick Colors</h3>
+          <div class="quick-color-buttons">
+            <button class="quick-color-btn" style="background: #ff0000;" onclick="setQuickColor(255, 0, 0)" title="Red"></button>
+            <button class="quick-color-btn" style="background: #ff8000;" onclick="setQuickColor(255, 128, 0)" title="Orange"></button>
+            <button class="quick-color-btn" style="background: #ffff00;" onclick="setQuickColor(255, 255, 0)" title="Yellow"></button>
+            <button class="quick-color-btn" style="background: #00ff00;" onclick="setQuickColor(0, 255, 0)" title="Green"></button>
+            <button class="quick-color-btn" style="background: #00ffff;" onclick="setQuickColor(0, 255, 255)" title="Cyan"></button>
+            <button class="quick-color-btn" style="background: #0080ff;" onclick="setQuickColor(0, 128, 255)" title="Blue"></button>
+            <button class="quick-color-btn" style="background: #8000ff;" onclick="setQuickColor(128, 0, 255)" title="Purple"></button>
+            <button class="quick-color-btn" style="background: #ff00ff;" onclick="setQuickColor(255, 0, 255)" title="Magenta"></button>
+            <button class="quick-color-btn" style="background: #ffffff; border-color: #666;" onclick="setQuickColor(255, 255, 255)" title="White"></button>
+          </div>
+        </div>
+        
+        <div class="control-section" data-capability="color" style="display: none;">
+          <h3>Color Wheel</h3>
+          <div class="color-picker-wrapper">
+            <div class="color-wheel-container">
+              <canvas id="colorWheel" class="color-wheel-canvas" width="200" height="200"></canvas>
+            </div>
+            <div style="text-align: center; color: #a0a0a0; font-size: 0.85rem;">
+              RGB: <span id="rgbDisplay">255, 255, 255</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="control-section" data-capability="brightness" style="display: none;">
+          <h3>Brightness</h3>
+          <div class="slider-container">
+            <div class="slider-label">
+              <span>Brightness</span>
+              <span id="brightnessValue">100%</span>
+            </div>
+            <input type="range" id="brightnessSlider" class="slider" min="0" max="100" value="100" oninput="updateBrightness(this.value)">
+          </div>
+        </div>
+        
+        <div class="control-section" data-capability="color_temp" style="display: none;">
+          <h3>Color Temperature</h3>
+          <div class="slider-container">
+            <div class="slider-label">
+              <span>Temperature</span>
+              <span id="ctValue">0%</span>
+            </div>
+            <input type="range" id="ctSlider" class="slider" min="0" max="255" value="0" oninput="updateColorTemperature(this.value)">
+          </div>
+        </div>
+        
+        <div class="control-section" data-capability="effects" style="display: none;">
+          <h3>Effects</h3>
+          <div class="slider-container">
+            <div class="slider-label">
+              <span>Effect Speed</span>
+              <span id="effectSpeedValue">535ms</span>
+            </div>
+            <input type="range" id="effectSpeedSlider" class="slider" min="70" max="1000" value="535" oninput="updateEffectSpeed(this.value)">
+          </div>
+          <button class="effect-button" onclick="startEffect('rainbow')">Rainbow</button>
+          <button class="effect-button" onclick="startEffect('strobe')">Strobe</button>
+          <button class="effect-button" onclick="startEffect('pulse')">Pulse</button>
+          <button class="effect-button" onclick="stopEffects()">Stop Effects</button>
+        </div>
+        
+        <div class="control-section" data-capability="strobe" style="display: none;" id="strobeControlSection">
+          <h3>Shutter/Strobe</h3>
+          <div id="strobeControls">
+            <!-- Dynamically populated based on selected fixtures -->
+          </div>
+        </div>
+        
+        <div class="control-section" data-capability="built_in_program" style="display: none;" id="builtInProgramControlSection">
+          <h3>Built-in Program</h3>
+          <div id="builtInProgramControls">
+            <!-- Dynamically populated based on selected fixtures -->
+          </div>
+        </div>
+        
+        <div class="control-section" data-capability="pan" style="display: none;" id="panControlSection">
+          <h3>Pan</h3>
+          <div id="panControls">
+            <!-- Dynamically populated based on selected fixtures -->
+          </div>
+        </div>
+        
+        <div class="control-section" data-capability="tilt" style="display: none;" id="tiltControlSection">
+          <h3>Tilt</h3>
+          <div id="tiltControls">
+            <!-- Dynamically populated based on selected fixtures -->
+          </div>
+        </div>
+        
+        <div class="control-section" data-capability="rotation" style="display: none;" id="rotationControlSection">
+          <h3>Rotation</h3>
+          <div id="rotationControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="gobo" style="display: none;" id="goboControlSection">
+          <h3>Gobo</h3>
+          <div id="goboControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="zoom" style="display: none;" id="zoomControlSection">
+          <h3>Zoom</h3>
+          <div id="zoomControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="focus" style="display: none;" id="focusControlSection">
+          <h3>Focus</h3>
+          <div id="focusControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="iris" style="display: none;" id="irisControlSection">
+          <h3>Iris</h3>
+          <div id="irisControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="prism" style="display: none;" id="prismControlSection">
+          <h3>Prism</h3>
+          <div id="prismControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="fog" style="display: none;" id="fogControlSection">
+          <h3>Fog</h3>
+          <div id="fogControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="haze" style="display: none;" id="hazeControlSection">
+          <h3>Haze</h3>
+          <div id="hazeControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="sound_sensitivity" style="display: none;" id="soundSensitivityControlSection">
+          <h3>Sound Sensitivity</h3>
+          <div id="soundSensitivityControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="color_preset" style="display: none;" id="colorPresetControlSection">
+          <h3>Color Preset</h3>
+          <div id="colorPresetControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="white" style="display: none;" id="whiteControlSection">
+          <h3>White</h3>
+          <div id="whiteControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="amber" style="display: none;" id="amberControlSection">
+          <h3>Amber</h3>
+          <div id="amberControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="uv" style="display: none;" id="uvControlSection">
+          <h3>UV</h3>
+          <div id="uvControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="lime" style="display: none;" id="limeControlSection">
+          <h3>Lime</h3>
+          <div id="limeControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="cyan" style="display: none;" id="cyanControlSection">
+          <h3>Cyan</h3>
+          <div id="cyanControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="magenta" style="display: none;" id="magentaControlSection">
+          <h3>Magenta</h3>
+          <div id="magentaControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="yellow" style="display: none;" id="yellowControlSection">
+          <h3>Yellow</h3>
+          <div id="yellowControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="effect_speed" style="display: none;" id="effectSpeedControlSection">
+          <h3>Effect Speed</h3>
+          <div id="effectSpeedControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="effect_param" style="display: none;" id="effectParamControlSection">
+          <h3>Effect Parameter</h3>
+          <div id="effectParamControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="effect_duration" style="display: none;" id="effectDurationControlSection">
+          <h3>Effect Duration</h3>
+          <div id="effectDurationControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="maintenance" style="display: none;" id="maintenanceControlSection">
+          <h3>Maintenance</h3>
+          <div id="maintenanceControls"></div>
+        </div>
+        
+        <div class="control-section" data-capability="reset" style="display: none;" id="resetControlSection">
+          <h3>Reset</h3>
+          <div id="resetControls"></div>
+        </div>
+        
+        <div class="control-section">
+          <h3>Stage Shapes (Drag to Canvas)</h3>
+          <div class="stage-shapes-library">
+            <div class="stage-shape-item" draggable="true" data-tool="stage" data-type="stage" ondragstart="handleShapeDragStart(event)">
+              <div class="shape-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/></svg></div>
+              <div class="shape-label">Stage</div>
+            </div>
+            <div class="stage-shape-item" draggable="true" data-tool="singer" data-type="singer" ondragstart="handleShapeDragStart(event)">
+              <div class="shape-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/><circle cx="12" cy="9" r="3"/></svg></div>
+              <div class="shape-label">Singer</div>
+            </div>
+            <div class="stage-shape-item" draggable="true" data-tool="musician" data-type="musician" ondragstart="handleShapeDragStart(event)">
+              <div class="shape-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M15 3H9c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h6c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-2v2h2v-2zm0-4h-2v2h2v-2zm0-4h-2v2h2V5zm2 8h-2v2h2v-2zm0-4h-2v2h2v-2z"/></svg></div>
+              <div class="shape-label">Musician</div>
+            </div>
+            <div class="stage-shape-item" draggable="true" data-tool="dj" data-type="dj" ondragstart="handleShapeDragStart(event)">
+              <div class="shape-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 2v20M2 12h20"/></svg></div>
+              <div class="shape-label">DJ</div>
+            </div>
+            <div class="stage-shape-item" draggable="true" data-tool="audience" data-type="audience" ondragstart="handleShapeDragStart(event)">
+              <div class="shape-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg></div>
+              <div class="shape-label">Audience</div>
+            </div>
+            <div class="stage-shape-item" draggable="true" data-tool="rectangle" data-type="rectangle" ondragstart="handleShapeDragStart(event)">
+              <div class="shape-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></div>
+              <div class="shape-label">Rectangle</div>
+            </div>
+            <div class="stage-shape-item" draggable="true" data-tool="line" data-type="line" ondragstart="handleShapeDragStart(event)">
+              <div class="shape-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="0" y1="12" x2="24" y2="12"/></svg></div>
+              <div class="shape-label">Line</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="control-section">
+          <h3>Background Images (Drag to Canvas)</h3>
+          <button class="stage-upload-btn" onclick="document.getElementById('backgroundUpload').click()" style="width: 100%; margin-bottom: 12px;">
+            📤 Upload Image
+          </button>
+          <input type="file" id="backgroundUpload" accept="image/jpeg,image/jpg,image/png,image/gif,image/webp" style="display: none;" onchange="handleBackgroundUpload(event)" multiple>
+          <div class="stage-images-library" id="stageImagesLibrary" style="max-height: 200px; overflow-y: auto;"></div>
+        </div>
+        
+      </div>
+      
+      <div class="canvas-main-area">
+        <div class="canvas-container">
+          <div class="fixture-canvas" id="fixtureCanvas">
+          <div class="stage-elements-layer" id="stageElementsLayer"></div>
+          <div class="fixtures-layer">
+            {% for group_name, group_info in groups.items() %}
+              {% if group_name != '_stage_layout' %}
+                {% set pos = group_info.get('position', {'x': 0, 'y': 0}) %}
+                {% set device_count = group_info.get('devices', [])|length %}
+                <div class="fixture fixture-group" 
+                     data-group="{{ group_name }}"
+                     data-is-fixture="false"
+                     style="left: {{ pos.x }}px; top: {{ pos.y }}px;"
+                     onclick="selectFixture('{{ group_name }}', false, event)"
+                     onmousedown="startDrag(event, '{{ group_name }}', false)"
+                     ontouchstart="handleTouchStart(event, '{{ group_name }}', false)"
+                     ontouchend="handleTouchEnd(event, '{{ group_name }}', false)">
+                  <div class="fixture-label">{{ group_name }}</div>
+                  <div class="fixture-info">{{ device_count }} device(s)</div>
+                </div>
+              {% endif %}
+            {% endfor %}
+            {% for fixture_name, fixture_info in fixtures.items() %}
+              {% set pos = fixture_info.get('position', {'x': 0, 'y': 0}) %}
+              {% set channel_count = fixture_info.get('channel_mapping', [])|length %}
+              <div class="fixture fixture-dmx" 
+                   data-fixture="{{ fixture_name }}"
+                   data-is-fixture="true"
+                   style="left: {{ pos.x }}px; top: {{ pos.y }}px;"
+                   onclick="selectFixture('{{ fixture_name }}', true, event)"
+                   onmousedown="startDrag(event, '{{ fixture_name }}', true)"
+                   ontouchstart="handleTouchStart(event, '{{ fixture_name }}', true)"
+                   ontouchend="handleTouchEnd(event, '{{ fixture_name }}', true)">
+                <div class="fixture-label">{{ fixture_name }}</div>
+                <div class="fixture-info">{{ channel_count }} channel(s)</div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    let selectedGroups = new Set();
+    let selectedFixtures = new Set();
+    let isDragging = false;
+    let dragElement = null;
+    let dragOffset = {x: 0, y: 0};
+    let currentColor = {r: 255, g: 255, b: 255};
+    let currentBrightness = 100;
+    let savedBrightness = 100; // Store brightness before turning off
+    let currentCT = 0;
+    let isPowerOn = true;
+    let activeEffect = null;
+    let effectInterval = null;
+    let effectSpeed = 535; // Default speed in ms (midpoint: slider value 535 -> 1070-535=535ms)
+    let pendingRequests = new Set(); // Track pending fetch requests to cancel them
+
+    // Color wheel setup
+    const colorWheelCanvas = document.getElementById('colorWheel');
+    const colorWheelCtx = colorWheelCanvas.getContext('2d');
+    const colorWheelSize = 200;
+    const centerX = colorWheelSize / 2;
+    const centerY = colorWheelSize / 2;
+    const radius = colorWheelSize / 2 - 10;
+
+    function drawColorWheel() {
+      for (let angle = 0; angle < 360; angle += 1) {
+        for (let r = 0; r < radius; r += 1) {
+          const rad = (angle * Math.PI) / 180;
+          const x = centerX + r * Math.cos(rad);
+          const y = centerY + r * Math.sin(rad);
+          
+          const hue = angle;
+          const saturation = (r / radius) * 100;
+          const value = 100;
+          const rgb = hsvToRgb(hue, saturation, value);
+          
+          colorWheelCtx.fillStyle = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+          colorWheelCtx.fillRect(x, y, 1, 1);
+        }
+      }
+    }
+
+    function hsvToRgb(h, s, v) {
+      h = h / 360;
+      s = s / 100;
+      v = v / 100;
+      const c = v * s;
+      const x = c * (1 - Math.abs((h * 6) % 2 - 1));
+      const m = v - c;
+      let r, g, b;
+      if (h < 1/6) { r = c; g = x; b = 0; }
+      else if (h < 2/6) { r = x; g = c; b = 0; }
+      else if (h < 3/6) { r = 0; g = c; b = x; }
+      else if (h < 4/6) { r = 0; g = x; b = c; }
+      else if (h < 5/6) { r = x; g = 0; b = c; }
+      else { r = c; g = 0; b = x; }
+      return {
+        r: Math.round((r + m) * 255),
+        g: Math.round((g + m) * 255),
+        b: Math.round((b + m) * 255)
+      };
+    }
+
+    colorWheelCanvas.addEventListener('click', function(e) {
+      const rect = colorWheelCanvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const dx = x - centerX;
+      const dy = y - centerY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance <= radius) {
+        // Calculate angle: atan2 returns -180 to 180, convert to 0-360
+        let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+        if (angle < 0) angle += 360;
+        const saturation = Math.min(100, (distance / radius) * 100);
+        const rgb = hsvToRgb(angle, saturation, 100);
+        currentColor = rgb;
+        document.getElementById('rgbDisplay').textContent = `${rgb.r}, ${rgb.g}, ${rgb.b}`;
+        if (selectedGroups.size > 0 || selectedFixtures.size > 0) {
+          applyColor();
+        }
+      }
+    });
+
+    // Initialize color wheel
+    drawColorWheel();
+    
+    // Initialize control visibility (hide all controls initially since nothing is selected)
+    loadCapabilities();
+
+    // Check if warning was previously dismissed
+    if (localStorage.getItem('visualControlWarningDismissed') === 'true') {
+      const warningBox = document.getElementById('visualControlWarning');
+      if (warningBox) {
+        warningBox.style.display = 'none';
+      }
+    }
+
+    function dismissWarning() {
+      const warningBox = document.getElementById('visualControlWarning');
+      if (warningBox) {
+        warningBox.style.display = 'none';
+        localStorage.setItem('visualControlWarningDismissed', 'true');
+      }
+    }
+
+    function setQuickColor(r, g, b) {
+      currentColor = {r: r, g: g, b: b};
+      document.getElementById('rgbDisplay').textContent = `${r}, ${g}, ${b}`;
+      if (selectedGroups.size > 0 || selectedFixtures.size > 0) {
+        applyColor();
+      }
+    }
+
+    let touchStartTime = 0;
+    let touchStartElement = null;
+    let touchStartPos = {x: 0, y: 0};
+    let touchMoved = false;
+    let touchDragTimeout = null;
+    
+    function handleTouchStart(event, name, isFixture) {
+      touchStartTime = Date.now();
+      touchStartElement = event.currentTarget;
+      touchMoved = false;
+      if (event.touches && event.touches.length > 0) {
+        touchStartPos.x = event.touches[0].clientX;
+        touchStartPos.y = event.touches[0].clientY;
+      }
+      // Set up touchmove listener to detect drag start
+      const touchMoveHandler = function(e) {
+        if (e.touches && e.touches.length > 0) {
+          const deltaX = Math.abs(e.touches[0].clientX - touchStartPos.x);
+          const deltaY = Math.abs(e.touches[0].clientY - touchStartPos.y);
+          // If moved more than 10 pixels, start dragging
+          if (deltaX > 10 || deltaY > 10) {
+            touchMoved = true;
+            if (touchDragTimeout) {
+              clearTimeout(touchDragTimeout);
+              touchDragTimeout = null;
+            }
+            // Start drag mode for touch
+            const syntheticEvent = {
+              touches: e.touches,
+              currentTarget: touchStartElement,
+              preventDefault: () => e.preventDefault(),
+              stopPropagation: () => e.stopPropagation()
+            };
+            startDrag(syntheticEvent, name, isFixture);
+            document.removeEventListener('touchmove', touchMoveHandler);
+          }
+        }
+      };
+      document.addEventListener('touchmove', touchMoveHandler, {passive: false});
+      
+      // Store handler reference for cleanup
+      touchStartElement._touchMoveHandler = touchMoveHandler;
+    }
+    
+    function handleTouchEnd(event, name, isFixture) {
+      // Clean up touchmove handler
+      if (touchStartElement && touchStartElement._touchMoveHandler) {
+        document.removeEventListener('touchmove', touchStartElement._touchMoveHandler);
+        touchStartElement._touchMoveHandler = null;
+      }
+      
+      // Clear any pending drag timeout
+      if (touchDragTimeout) {
+        clearTimeout(touchDragTimeout);
+        touchDragTimeout = null;
+      }
+      
+      // If it was a quick tap (less than 300ms) and no movement, treat as selection
+      const touchDuration = Date.now() - touchStartTime;
+      if (touchDuration < 300 && touchStartElement === event.currentTarget && !touchMoved && !isDragging) {
+        event.preventDefault();
+        event.stopPropagation();
+        selectFixture(name, isFixture, event);
+      }
+      // stopDrag will handle cleanup if we were dragging
+      if (isDragging) {
+        const syntheticEvent = {
+          touches: event.changedTouches,
+          preventDefault: () => event.preventDefault(),
+          stopPropagation: () => event.stopPropagation()
+        };
+        stopDrag(syntheticEvent);
+      }
+      touchStartTime = 0;
+      touchStartElement = null;
+      touchMoved = false;
+    }
+    
+    function updateControlVisibility(data) {
+      const capabilities = data.capabilities || {};
+      const capabilityDetails = data.capability_details || {};
+      
+      // Show/hide control sections based on capabilities
+      // Map all capability types to their control sections
+      const capabilityMap = {
+        'power': 'power',
+        'color': 'color',
+        'brightness': 'brightness',
+        'color_temp': 'color_temp',
+        'effects': 'effects',
+        'strobe': 'strobe',
+        'shutter': 'strobe',  // Shutter uses the same section as strobe
+        'built_in_program': 'built_in_program',
+        'color_preset': 'color_preset',
+        'pan': 'pan',
+        'tilt': 'tilt',
+        'rotation': 'rotation',
+        'gobo': 'gobo',
+        'zoom': 'zoom',
+        'focus': 'focus',
+        'iris': 'iris',
+        'prism': 'prism',
+        'fog': 'fog',
+        'haze': 'haze',
+        'sound_sensitivity': 'sound_sensitivity',
+        'white': 'white',
+        'amber': 'amber',
+        'uv': 'uv',
+        'lime': 'lime',
+        'cyan': 'cyan',
+        'magenta': 'magenta',
+        'yellow': 'yellow',
+        'effect_speed': 'effect_speed',
+        'effect_param': 'effect_param',
+        'effect_duration': 'effect_duration',
+        'maintenance': 'maintenance',
+        'reset': 'reset'
+      };
+      
+      Object.keys(capabilityMap).forEach(cap => {
+        const sections = document.querySelectorAll(`[data-capability="${capabilityMap[cap]}"]`);
+        if (capabilities[cap]) {
+          sections.forEach(section => section.style.display = '');
+        } else {
+          sections.forEach(section => section.style.display = 'none');
+        }
+      });
+      
+      // Generate dynamic controls for shutter/strobe
+      if (capabilities.strobe || capabilities.shutter) {
+        generateStrobeControls(capabilityDetails.strobe || [], capabilityDetails.shutter || []);
+      }
+      
+      // Generate dynamic controls for built-in programs
+      if (capabilities.built_in_program) {
+        generateBuiltInProgramControls(capabilityDetails.built_in_program || []);
+      }
+      
+      // Generate controls for pan/tilt
+      if (capabilities.pan) {
+        generatePanControls(capabilityDetails.pan || []);
+      }
+      if (capabilities.tilt) {
+        generateTiltControls(capabilityDetails.tilt || []);
+      }
+      
+      // Generate slider controls for all other slider-based capabilities
+      const sliderTypes = ['rotation', 'zoom', 'focus', 'iris', 'prism', 'fog', 'haze', 'sound_sensitivity',
+                           'white', 'amber', 'uv', 'lime', 'cyan', 'magenta', 'yellow', 
+                           'effect_speed', 'effect_param', 'effect_duration'];
+      sliderTypes.forEach(type => {
+        if (capabilities[type]) {
+          generateSliderControls(type, capabilityDetails[type] || []);
+        }
+      });
+      
+      // Generate dropdown controls
+      if (capabilities.color_preset) {
+        generateColorPresetControls(capabilityDetails.color_preset || []);
+      }
+      if (capabilities.gobo) {
+        generateGoboControls(capabilityDetails.gobo || []);
+      }
+      
+      // Generate button controls
+      if (capabilities.maintenance) {
+        generateMaintenanceControls(capabilityDetails.maintenance || []);
+      }
+      if (capabilities.reset) {
+        generateResetControls(capabilityDetails.reset || []);
+      }
+    }
+
+    function loadCapabilities() {
+      const groups = Array.from(selectedGroups);
+      const fixtures = Array.from(selectedFixtures);
+      
+      // If nothing selected, hide all controls
+      if (groups.length === 0 && fixtures.length === 0) {
+        document.querySelectorAll('[data-capability]').forEach(section => {
+          section.style.display = 'none';
+        });
+        return;
+      }
+      
+      // Fetch capabilities from API
+      fetch('/api/visual_control/capabilities', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          groups: groups,
+          fixtures: fixtures
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success && data.capabilities) {
+          updateControlVisibility(data);
+        }
+      })
+      .catch(err => {
+        console.error('Error loading capabilities:', err);
+        // On error, show all controls as fallback
+        document.querySelectorAll('[data-capability]').forEach(section => {
+          section.style.display = '';
+        });
+      });
+    }
+
+    function selectFixture(name, isFixture, event) {
+      event.stopPropagation();
+      const fixture = event.currentTarget;
+      // Always toggle selection - click to select, click again to deselect
+      if (isFixture) {
+        if (selectedFixtures.has(name)) {
+          selectedFixtures.delete(name);
+          fixture.classList.remove('selected');
+        } else {
+          selectedFixtures.add(name);
+          fixture.classList.add('selected');
+        }
+      } else {
+        if (selectedGroups.has(name)) {
+          selectedGroups.delete(name);
+          fixture.classList.remove('selected');
+        } else {
+          selectedGroups.add(name);
+          fixture.classList.add('selected');
+        }
+      }
+      
+      // Update control visibility based on new selection
+      loadCapabilities();
+    }
+
+    function startDrag(event, name, isFixture) {
+      // For mouse events, only allow left button (button 0)
+      if (event.button !== undefined && event.button !== 0 && !event.touches) return;
+      
+      event.preventDefault();
+      event.stopPropagation();
+      isDragging = true;
+      dragElement = event.currentTarget;
+      dragElement.classList.add('dragging');
+      
+      const rect = dragElement.getBoundingClientRect();
+      const canvasRect = document.getElementById('fixtureCanvas').getBoundingClientRect();
+      if (event.touches && event.touches.length > 0) {
+        dragOffset.x = event.touches[0].clientX - rect.left;
+        dragOffset.y = event.touches[0].clientY - rect.top;
+      } else {
+        dragOffset.x = event.clientX - rect.left;
+        dragOffset.y = event.clientY - rect.top;
+      }
+      
+      document.addEventListener('mousemove', drag);
+      document.addEventListener('mouseup', stopDrag);
+      document.addEventListener('touchmove', drag, {passive: false});
+      document.addEventListener('touchend', stopDrag);
+    }
+
+    function drag(event) {
+      if (!isDragging || !dragElement) return;
+      event.preventDefault();
+      
+      // Track movement for touch events
+      if (event.touches && touchStartPos) {
+        const deltaX = Math.abs(event.touches[0].clientX - touchStartPos.x);
+        const deltaY = Math.abs(event.touches[0].clientY - touchStartPos.y);
+        if (deltaX > 5 || deltaY > 5) {
+          touchMoved = true;
+        }
+      }
+      
+      const canvasRect = document.getElementById('fixtureCanvas').getBoundingClientRect();
+      let clientX, clientY;
+      if (event.touches && event.touches.length > 0) {
+        clientX = event.touches[0].clientX;
+        clientY = event.touches[0].clientY;
+      } else {
+        clientX = event.clientX;
+        clientY = event.clientY;
+      }
+      const x = clientX - canvasRect.left - dragOffset.x;
+      const y = clientY - canvasRect.top - dragOffset.y;
+      dragElement.style.left = Math.max(0, x) + 'px';
+      dragElement.style.top = Math.max(0, y) + 'px';
+    }
+
+    function stopDrag(event) {
+      if (!isDragging || !dragElement) return;
+      isDragging = false;
+      dragElement.classList.remove('dragging');
+      const isFixture = dragElement.dataset.isFixture === 'true';
+      const name = isFixture ? dragElement.dataset.fixture : dragElement.dataset.group;
+      const x = parseInt(dragElement.style.left);
+      const y = parseInt(dragElement.style.top);
+      saveFixturePosition(name, isFixture, x, y);
+      dragElement = null;
+      document.removeEventListener('mousemove', drag);
+      document.removeEventListener('mouseup', stopDrag);
+      document.removeEventListener('touchmove', drag);
+      document.removeEventListener('touchend', stopDrag);
+    }
+
+    function saveFixturePosition(name, isFixture, x, y) {
+      if (isFixture) {
+        fetch(`/api/fixtures/${encodeURIComponent(name)}/set_position`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({x: x, y: y})
+        }).catch(err => console.error('Error saving fixture position:', err));
+      } else {
+        fetch(`/api/groups/${encodeURIComponent(name)}/set_position`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({x: x, y: y})
+        }).catch(err => console.error('Error saving group position:', err));
+      }
+    }
+
+    function togglePower() {
+      if (isPowerOn) {
+        // Turn off: save current brightness and set to 0
+        savedBrightness = currentBrightness;
+        currentBrightness = 0;
+        document.getElementById('brightnessSlider').value = 0;
+        document.getElementById('brightnessValue').textContent = '0%';
+        isPowerOn = false;
+        const btn = document.getElementById('powerBtn');
+        btn.classList.remove('on');
+        btn.textContent = '○';
+        applyBrightness();
+      } else {
+        // Turn on: restore brightness and use color action (which turns device on first)
+        currentBrightness = savedBrightness > 0 ? savedBrightness : 100;
+        document.getElementById('brightnessSlider').value = currentBrightness;
+        document.getElementById('brightnessValue').textContent = currentBrightness + '%';
+        isPowerOn = true;
+        const btn = document.getElementById('powerBtn');
+        btn.classList.add('on');
+        btn.textContent = '⚡';
+        // Use applyColor instead of applyBrightness to ensure device turns on
+        applyColor();
+      }
+    }
+
+    function updateBrightness(value) {
+      currentBrightness = parseInt(value);
+      document.getElementById('brightnessValue').textContent = value + '%';
+      if (currentBrightness === 0) {
+        isPowerOn = false;
+        const btn = document.getElementById('powerBtn');
+        btn.classList.remove('on');
+        btn.textContent = '○';
+      } else {
+        isPowerOn = true;
+        savedBrightness = currentBrightness;
+        const btn = document.getElementById('powerBtn');
+        btn.classList.add('on');
+        btn.textContent = '⚡';
+      }
+      applyBrightness();
+    }
+
+    function updateColorTemperature(value) {
+      currentCT = parseInt(value);
+      const percent = Math.round((value / 255) * 100);
+      document.getElementById('ctValue').textContent = percent + '%';
+      applyColorTemperature();
+    }
+
+    function applyColor() {
+      if (selectedGroups.size === 0 && selectedFixtures.size === 0) return;
+      const groups = Array.from(selectedGroups);
+      const fixtures = Array.from(selectedFixtures);
+      
+      // Send to groups API if there are selected groups
+      if (groups.length > 0) {
+        const controller = new AbortController();
+        pendingRequests.add(controller);
+        fetch('/api/groups/batch_control', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            groups: groups,
+            action: 'color',
+            r: currentColor.r,
+            g: currentColor.g,
+            b: currentColor.b,
+            brightness: currentBrightness,
+            ct: currentCT
+          }),
+          signal: controller.signal
+        })
+        .then(() => pendingRequests.delete(controller))
+        .catch(err => {
+          if (err.name !== 'AbortError') {
+            console.error('Error applying color to groups:', err);
+          }
+          pendingRequests.delete(controller);
+        });
+      }
+      
+      // Send to fixtures API if there are selected fixtures
+      if (fixtures.length > 0) {
+        const controller = new AbortController();
+        pendingRequests.add(controller);
+        fetch('/api/fixtures/batch_control', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            fixtures: fixtures,
+            action: 'color',
+            r: currentColor.r,
+            g: currentColor.g,
+            b: currentColor.b,
+            brightness: currentBrightness,
+            ct: currentCT
+          }),
+          signal: controller.signal
+        })
+        .then(() => pendingRequests.delete(controller))
+        .catch(err => {
+          if (err.name !== 'AbortError') {
+            console.error('Error applying color to fixtures:', err);
+          }
+          pendingRequests.delete(controller);
+        });
+      }
+    }
+
+    function applyBrightness() {
+      if (selectedGroups.size === 0 && selectedFixtures.size === 0) return;
+      const groups = Array.from(selectedGroups);
+      const fixtures = Array.from(selectedFixtures);
+      
+      // Send to groups API if there are selected groups
+      if (groups.length > 0) {
+        const controller = new AbortController();
+        pendingRequests.add(controller);
+        fetch('/api/groups/batch_control', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            groups: groups,
+            action: 'brightness',
+            r: currentColor.r,
+            g: currentColor.g,
+            b: currentColor.b,
+            brightness: currentBrightness,
+            ct: currentCT
+          }),
+          signal: controller.signal
+        })
+        .then(() => pendingRequests.delete(controller))
+        .catch(err => {
+          if (err.name !== 'AbortError') {
+            console.error('Error applying brightness to groups:', err);
+          }
+          pendingRequests.delete(controller);
+        });
+      }
+      
+      // Send to fixtures API if there are selected fixtures
+      if (fixtures.length > 0) {
+        const controller = new AbortController();
+        pendingRequests.add(controller);
+        fetch('/api/fixtures/batch_control', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            fixtures: fixtures,
+            action: 'brightness',
+            r: currentColor.r,
+            g: currentColor.g,
+            b: currentColor.b,
+            brightness: currentBrightness,
+            ct: currentCT
+          }),
+          signal: controller.signal
+        })
+        .then(() => pendingRequests.delete(controller))
+        .catch(err => {
+          if (err.name !== 'AbortError') {
+            console.error('Error applying brightness to fixtures:', err);
+          }
+          pendingRequests.delete(controller);
+        });
+      }
+    }
+
+    function applyColorTemperature() {
+      if (selectedGroups.size === 0 && selectedFixtures.size === 0) return;
+      const groups = Array.from(selectedGroups);
+      const fixtures = Array.from(selectedFixtures);
+      
+      // Send to groups API if there are selected groups
+      if (groups.length > 0) {
+        const controller = new AbortController();
+        pendingRequests.add(controller);
+        fetch('/api/groups/batch_control', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            groups: groups,
+            action: 'color_temperature',
+            r: currentColor.r,
+            g: currentColor.g,
+            b: currentColor.b,
+            brightness: currentBrightness,
+            ct: currentCT
+          }),
+          signal: controller.signal
+        })
+        .then(() => pendingRequests.delete(controller))
+        .catch(err => {
+          if (err.name !== 'AbortError') {
+            console.error('Error applying color temperature to groups:', err);
+          }
+          pendingRequests.delete(controller);
+        });
+      }
+      
+      // Send to fixtures API if there are selected fixtures
+      if (fixtures.length > 0) {
+        const controller = new AbortController();
+        pendingRequests.add(controller);
+        fetch('/api/fixtures/batch_control', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            fixtures: fixtures,
+            action: 'color_temperature',
+            r: currentColor.r,
+            g: currentColor.g,
+            b: currentColor.b,
+            brightness: currentBrightness,
+            ct: currentCT
+          }),
+          signal: controller.signal
+        })
+        .then(() => pendingRequests.delete(controller))
+        .catch(err => {
+          if (err.name !== 'AbortError') {
+            console.error('Error applying color temperature to fixtures:', err);
+          }
+          pendingRequests.delete(controller);
+        });
+      }
+    }
+
+    function applyPowerState() {
+      // Power state is now controlled via brightness, so this function is not needed
+      // But keeping it for backwards compatibility if called from elsewhere
+      applyBrightness();
+    }
+
+    function startEffect(effectName) {
+      stopEffects();
+      activeEffect = effectName;
+      document.querySelectorAll('.effect-button').forEach(btn => {
+        if (btn.textContent.toLowerCase().includes(effectName)) {
+          btn.classList.add('active');
+        }
+      });
+      
+      // Check if fixtures or groups are selected
+      if (selectedGroups.size === 0 && selectedFixtures.size === 0) {
+        alert('Please select at least one fixture or group first by clicking on it.');
+        activeEffect = null;
+        document.querySelectorAll('.effect-button').forEach(btn => btn.classList.remove('active'));
+        return;
+      }
+      
+      if (effectName === 'rainbow') {
+        let hue = 0;
+        effectInterval = setInterval(() => {
+          // Check if effect was stopped
+          if (activeEffect !== 'rainbow' || effectInterval === null) {
+            clearInterval(effectInterval);
+            return;
+          }
+          try {
+            hue = (hue + 5) % 360;
+            const rgb = hsvToRgb(hue, 100, 100);
+            currentColor = rgb;
+            document.getElementById('rgbDisplay').textContent = `${rgb.r}, ${rgb.g}, ${rgb.b}`;
+            applyColor();
+          } catch (e) {
+            console.error('Error in rainbow effect:', e);
+          }
+        }, effectSpeed);
+      } else if (effectName === 'strobe') {
+        let strobeOn = true;
+        // Strobe should be slower - use a minimum of 100ms or effectSpeed, whichever is larger
+        const strobeSpeed = Math.max(effectSpeed, 100);
+        effectInterval = setInterval(() => {
+          // Check if effect was stopped
+          if (activeEffect !== 'strobe' || effectInterval === null) {
+            clearInterval(effectInterval);
+            return;
+          }
+          try {
+            strobeOn = !strobeOn;
+            if (strobeOn) {
+              currentBrightness = savedBrightness > 0 ? savedBrightness : 100;
+              document.getElementById('powerBtn').classList.add('on');
+              document.getElementById('powerBtn').textContent = '⚡';
+              document.getElementById('brightnessSlider').value = currentBrightness;
+              document.getElementById('brightnessValue').textContent = currentBrightness + '%';
+              // Use applyColor to turn lights on (like power button does)
+              applyColor();
+            } else {
+              currentBrightness = 0;
+              document.getElementById('powerBtn').classList.remove('on');
+              document.getElementById('powerBtn').textContent = '○';
+              document.getElementById('brightnessSlider').value = currentBrightness;
+              document.getElementById('brightnessValue').textContent = currentBrightness + '%';
+              applyBrightness();
+            }
+          } catch (e) {
+            console.error('Error in strobe effect:', e);
+          }
+        }, strobeSpeed);
+      } else if (effectName === 'pulse') {
+        let minBrightness = 20;
+        let maxBrightness = savedBrightness > 0 ? savedBrightness : 100;
+        currentBrightness = minBrightness;
+        let direction = 1;
+        effectInterval = setInterval(() => {
+          // Check if effect was stopped
+          if (activeEffect !== 'pulse' || effectInterval === null) {
+            clearInterval(effectInterval);
+            return;
+          }
+          try {
+            currentBrightness += direction * 5;
+            if (currentBrightness >= maxBrightness) {
+              currentBrightness = maxBrightness;
+              direction = -1;
+            } else if (currentBrightness <= minBrightness) {
+              currentBrightness = minBrightness;
+              direction = 1;
+            }
+            document.getElementById('brightnessSlider').value = currentBrightness;
+            document.getElementById('brightnessValue').textContent = currentBrightness + '%';
+            isPowerOn = true;
+            document.getElementById('powerBtn').classList.add('on');
+            document.getElementById('powerBtn').textContent = '⚡';
+            applyBrightness();
+          } catch (e) {
+            console.error('Error in pulse effect:', e);
+          }
+        }, effectSpeed);
+      }
+    }
+
+    function updateEffectSpeed(value) {
+      // Reverse the slider value: slider goes 70 (left) to 1000 (right)
+      // But we want effectSpeed to be 1000ms (slow) when slider is at 70, and 70ms (fast) when slider is at 1000
+      const sliderValue = parseInt(value);
+      effectSpeed = 1070 - sliderValue; // Reverse: 70->1000, 1000->70
+      document.getElementById('effectSpeedValue').textContent = effectSpeed + 'ms';
+      // Restart current effect with new speed if one is running
+      if (activeEffect) {
+        const currentEffect = activeEffect;
+        stopEffects();
+        startEffect(currentEffect);
+      }
+    }
+
+    function stopEffects() {
+      // Cancel all pending requests immediately
+      pendingRequests.forEach(controller => {
+        try {
+          controller.abort();
+        } catch (e) {
+          console.error('Error aborting request:', e);
+        }
+      });
+      pendingRequests.clear();
+      
+      // Set activeEffect to null first so interval callbacks can check and exit
+      activeEffect = null;
+      
+      // Clear any running intervals
+      if (effectInterval !== null && effectInterval !== undefined) {
+        try {
+          clearInterval(effectInterval);
+        } catch (e) {
+          console.error('Error clearing interval:', e);
+        }
+        effectInterval = null;
+      }
+      
+      // Remove active class from all effect buttons
+      document.querySelectorAll('.effect-button').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      
+      console.log('Effects stopped');
+    }
+    
+    function generateStrobeControls(strobeDetails, shutterDetails) {
+      const container = document.getElementById('strobeControls');
+      container.innerHTML = '';
+      
+      // Combine strobe and shutter details
+      const allDetails = [...strobeDetails, ...shutterDetails];
+      if (allDetails.length === 0) return;
+      
+      // Group by fixture_name and channel
+      const grouped = {};
+      allDetails.forEach(detail => {
+        const key = `${detail.fixture_name}_${detail.channel}`;
+        if (!grouped[key]) {
+          grouped[key] = {
+            fixture_name: detail.fixture_name,
+            channel: detail.channel,
+            capabilities: []
+          };
+        }
+        grouped[key].capabilities.push(...detail.capabilities);
+      });
+      
+      // Generate controls for each channel
+      Object.values(grouped).forEach(group => {
+        // Find shutter and strobe capabilities
+        const shutterCaps = group.capabilities.filter(c => c.type === 'shutter' || (c.name && c.name.toLowerCase().includes('shutter')));
+        const strobeCaps = group.capabilities.filter(c => c.type === 'strobe' || (c.name && c.name.toLowerCase().includes('strobe')));
+        
+        if (shutterCaps.length > 0 || strobeCaps.length > 0) {
+          const wrapper = document.createElement('div');
+          wrapper.style.marginBottom = '24px';
+          wrapper.style.background = '#2d2d2d';
+          wrapper.style.borderRadius = '8px';
+          wrapper.style.padding = '16px';
+          wrapper.style.border = '1px solid #3b3b3b';
+          
+          // Header with channel number and title
+          const header = document.createElement('div');
+          header.style.display = 'flex';
+          header.style.alignItems = 'center';
+          header.style.marginBottom = '12px';
+          header.style.gap = '12px';
+          
+          const channelBadge = document.createElement('div');
+          channelBadge.textContent = group.channel;
+          channelBadge.style.width = '32px';
+          channelBadge.style.height = '32px';
+          channelBadge.style.borderRadius = '16px';
+          channelBadge.style.background = '#3b3b3b';
+          channelBadge.style.display = 'flex';
+          channelBadge.style.alignItems = 'center';
+          channelBadge.style.justifyContent = 'center';
+          channelBadge.style.fontWeight = 'bold';
+          channelBadge.style.color = '#ffffff';
+          header.appendChild(channelBadge);
+          
+          const title = document.createElement('h4');
+          title.textContent = `Shutter/Strobe - ${group.fixture_name}`;
+          title.style.margin = '0';
+          title.style.color = '#ffffff';
+          title.style.fontSize = '1rem';
+          header.appendChild(title);
+          
+          wrapper.appendChild(header);
+          
+          // Create table (like Lightkey)
+          const table = document.createElement('table');
+          table.style.width = '100%';
+          table.style.borderCollapse = 'collapse';
+          table.style.marginTop = '12px';
+          
+          // Table header
+          const thead = document.createElement('thead');
+          const headerRow = document.createElement('tr');
+          headerRow.style.borderBottom = '1px solid #3b3b3b';
+          
+          const rangeHeader = document.createElement('th');
+          rangeHeader.textContent = 'Range';
+          rangeHeader.style.padding = '8px';
+          rangeHeader.style.textAlign = 'left';
+          rangeHeader.style.color = '#a0a0a0';
+          rangeHeader.style.fontWeight = '500';
+          headerRow.appendChild(rangeHeader);
+          
+          const stateHeader = document.createElement('th');
+          stateHeader.textContent = 'State';
+          stateHeader.style.padding = '8px';
+          stateHeader.style.textAlign = 'left';
+          stateHeader.style.color = '#a0a0a0';
+          stateHeader.style.fontWeight = '500';
+          headerRow.appendChild(stateHeader);
+          
+          const speedHeader = document.createElement('th');
+          speedHeader.textContent = 'Speed';
+          speedHeader.style.padding = '8px';
+          speedHeader.style.textAlign = 'left';
+          speedHeader.style.color = '#a0a0a0';
+          speedHeader.style.fontWeight = '500';
+          headerRow.appendChild(speedHeader);
+          
+          thead.appendChild(headerRow);
+          table.appendChild(thead);
+          
+          // Table body - combine shutter and strobe capabilities
+          const tbody = document.createElement('tbody');
+          const allCaps = [...shutterCaps, ...strobeCaps];
+          
+          // Sort by range start
+          const sortedCaps = allCaps.sort((a, b) => {
+            const aStart = (a.dmxRange || [0, 255])[0];
+            const bStart = (b.dmxRange || [0, 255])[0];
+            return aStart - bStart;
+          });
+          
+          sortedCaps.forEach((cap, index) => {
+            const row = document.createElement('tr');
+            row.style.borderBottom = index < sortedCaps.length - 1 ? '1px solid #3b3b3b' : 'none';
+            row.style.transition = 'background-color 0.2s ease';
+            
+            row.onmouseenter = function() {
+              this.style.backgroundColor = '#363636';
+            };
+            row.onmouseleave = function() {
+              this.style.backgroundColor = 'transparent';
+            };
+            
+            const range = cap.dmxRange || [0, 255];
+            
+            // Range cell
+            const rangeCell = document.createElement('td');
+            rangeCell.style.padding = '10px 8px';
+            rangeCell.style.color = '#ffffff';
+            rangeCell.textContent = `${range[0]} - ${range[1]}`;
+            row.appendChild(rangeCell);
+            
+            // State cell - dropdown with shutter/strobe options
+            const stateCell = document.createElement('td');
+            stateCell.style.padding = '10px 8px';
+            
+            const stateSelect = document.createElement('select');
+            stateSelect.className = 'program-select';
+            stateSelect.style.width = '100%';
+            stateSelect.style.fontSize = '0.9rem';
+            
+            // Determine if this is shutter or strobe capability
+            const isShutter = cap.type === 'shutter' || (cap.name && cap.name.toLowerCase().includes('shutter'));
+            
+            if (isShutter) {
+              // Shutter options
+              const shutterOptgroup = document.createElement('optgroup');
+              shutterOptgroup.label = 'Shutter';
+              
+              const openOption = document.createElement('option');
+              openOption.value = 'shutter_open';
+              openOption.textContent = 'Shutter Open';
+              if (cap.name && cap.name.toLowerCase().includes('open')) {
+                openOption.selected = true;
+              }
+              shutterOptgroup.appendChild(openOption);
+              
+              const closedOption = document.createElement('option');
+              closedOption.value = 'shutter_closed';
+              closedOption.textContent = 'Shutter Closed';
+              if (cap.name && cap.name.toLowerCase().includes('closed')) {
+                closedOption.selected = true;
+              }
+              shutterOptgroup.appendChild(closedOption);
+              
+              stateSelect.appendChild(shutterOptgroup);
+              
+              stateSelect.onchange = function() {
+                const value = this.value === 'shutter_open' ? range[0] : range[0];
+                sendFixtureDMXChannelValue(group.fixture_name, group.channel, value);
+              };
+            } else {
+              // Strobe options with categories
+              const strobeOptions = {
+                'Strobe': [
+                  {name: 'Strobe', icon: '⚡'},
+                  {name: 'Random Strobe', icon: '⚡'},
+                  {name: 'Synchronized Strobe', icon: '⚡'},
+                  {name: 'Random Synchronized Strobe', icon: '⚡'},
+                  {name: 'Lightning Strobe', icon: '⚡'},
+                  {name: 'Sound-Active Strobe', icon: '⚡'}
+                ],
+                'Pulse': [
+                  {name: 'Pulse Opening', icon: '▲'},
+                  {name: 'Random Pulse Opening', icon: '▲'},
+                  {name: 'Pulse Closing', icon: '▼'},
+                  {name: 'Random Pulse Closing', icon: '▼'},
+                  {name: 'Pulse Alternating', icon: '▲▼'},
+                  {name: 'Random Pulse Alternating', icon: '▲▼'},
+                  {name: 'Burst Pulse', icon: '▲▲▲'},
+                  {name: 'Random Burst Pulse', icon: '▲▲▲'}
+                ]
+              };
+              
+              Object.keys(strobeOptions).forEach(category => {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = category;
+                
+                strobeOptions[category].forEach(option => {
+                  const optionEl = document.createElement('option');
+                  optionEl.value = option.name;
+                  optionEl.textContent = `${option.icon} ${option.name}`;
+                  // Try to match current capability name
+                  if (cap.name && cap.name.toLowerCase().includes(option.name.toLowerCase().replace(/\\s+/g, '').substring(0, 5))) {
+                    optionEl.selected = true;
+                  }
+                  optgroup.appendChild(optionEl);
+                });
+                
+                stateSelect.appendChild(optgroup);
+              });
+              
+              stateSelect.onchange = function() {
+                // Use middle of range for the selected strobe effect
+                const dmxValue = Math.floor((range[0] + range[1]) / 2);
+                sendFixtureDMXChannelValue(group.fixture_name, group.channel, dmxValue);
+              };
+              
+              // Select first option if none selected
+              if (stateSelect.selectedIndex === -1 && stateSelect.options.length > 0) {
+                stateSelect.selectedIndex = 0;
+              }
+            }
+            
+            stateCell.appendChild(stateSelect);
+            row.appendChild(stateCell);
+            
+            // Speed cell - placeholder (could add slider or input)
+            const speedCell = document.createElement('td');
+            speedCell.style.padding = '10px 8px';
+            speedCell.style.color = '#a0a0a0';
+            speedCell.textContent = '—';  // Placeholder
+            row.appendChild(speedCell);
+            
+            tbody.appendChild(row);
+          });
+          
+          table.appendChild(tbody);
+          wrapper.appendChild(table);
+          container.appendChild(wrapper);
+        }
+      });
+    }
+    
+    function generateBuiltInProgramControls(programDetails) {
+      const container = document.getElementById('builtInProgramControls');
+      container.innerHTML = '';
+      
+      if (programDetails.length === 0) return;
+      
+      // Group by fixture_name and channel
+      const grouped = {};
+      programDetails.forEach(detail => {
+        const key = `${detail.fixture_name}_${detail.channel}`;
+        if (!grouped[key]) {
+          grouped[key] = {
+            fixture_name: detail.fixture_name,
+            channel: detail.channel,
+            capabilities: []
+          };
+        }
+        grouped[key].capabilities.push(...detail.capabilities);
+      });
+      
+      // Generate table for each channel (like Lightkey)
+      Object.values(grouped).forEach(group => {
+        const wrapper = document.createElement('div');
+        wrapper.style.marginBottom = '24px';
+        wrapper.style.background = '#2d2d2d';
+        wrapper.style.borderRadius = '8px';
+        wrapper.style.padding = '16px';
+        wrapper.style.border = '1px solid #3b3b3b';
+        
+        // Header with channel number and title
+        const header = document.createElement('div');
+        header.style.display = 'flex';
+        header.style.alignItems = 'center';
+        header.style.marginBottom = '12px';
+        header.style.gap = '12px';
+        
+        const channelBadge = document.createElement('div');
+        channelBadge.textContent = group.channel;
+        channelBadge.style.width = '32px';
+        channelBadge.style.height = '32px';
+        channelBadge.style.borderRadius = '16px';
+        channelBadge.style.background = '#3b3b3b';
+        channelBadge.style.display = 'flex';
+        channelBadge.style.alignItems = 'center';
+        channelBadge.style.justifyContent = 'center';
+        channelBadge.style.fontWeight = 'bold';
+        channelBadge.style.color = '#ffffff';
+        header.appendChild(channelBadge);
+        
+        const title = document.createElement('h4');
+        title.textContent = `Built-in Program - ${group.fixture_name}`;
+        title.style.margin = '0';
+        title.style.color = '#ffffff';
+        title.style.fontSize = '1rem';
+        header.appendChild(title);
+        
+        wrapper.appendChild(header);
+        
+        // Create table
+        const table = document.createElement('table');
+        table.style.width = '100%';
+        table.style.borderCollapse = 'collapse';
+        table.style.marginTop = '12px';
+        
+        // Table header
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        headerRow.style.borderBottom = '1px solid #3b3b3b';
+        
+        const rangeHeader = document.createElement('th');
+        rangeHeader.textContent = 'Range';
+        rangeHeader.style.padding = '8px';
+        rangeHeader.style.textAlign = 'left';
+        rangeHeader.style.color = '#a0a0a0';
+        rangeHeader.style.fontWeight = '500';
+        headerRow.appendChild(rangeHeader);
+        
+        const nameHeader = document.createElement('th');
+        nameHeader.textContent = 'Name';
+        nameHeader.style.padding = '8px';
+        nameHeader.style.textAlign = 'left';
+        nameHeader.style.color = '#a0a0a0';
+        nameHeader.style.fontWeight = '500';
+        headerRow.appendChild(nameHeader);
+        
+        const actionHeader = document.createElement('th');
+        actionHeader.style.padding = '8px';
+        actionHeader.style.textAlign = 'right';
+        actionHeader.style.width = '120px';
+        headerRow.appendChild(actionHeader);
+        
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+        
+        // Table body
+        const tbody = document.createElement('tbody');
+        
+        // Sort capabilities by range start
+        const sortedCaps = [...group.capabilities].sort((a, b) => {
+          const aStart = (a.dmxRange || [0, 255])[0];
+          const bStart = (b.dmxRange || [0, 255])[0];
+          return aStart - bStart;
+        });
+        
+        // Filter out NoFunction capabilities and sort
+        const validCaps = sortedCaps.filter(cap => {
+          // Skip if type is explicitly "no_function" or name indicates no function
+          if (cap.type === 'no_function' || (cap.name && cap.name.toLowerCase().includes('nofunction'))) {
+            return false;
+          }
+          return true;
+        });
+        
+        if (validCaps.length === 0) {
+          const noProgramsMsg = document.createElement('div');
+          noProgramsMsg.textContent = 'No programs available';
+          noProgramsMsg.style.color = '#a0a0a0';
+          noProgramsMsg.style.padding = '16px';
+          noProgramsMsg.style.textAlign = 'center';
+          wrapper.appendChild(noProgramsMsg);
+          container.appendChild(wrapper);
+          return;
+        }
+        
+        validCaps.forEach((cap, index) => {
+          const row = document.createElement('tr');
+          row.style.borderBottom = index < validCaps.length - 1 ? '1px solid #3b3b3b' : 'none';
+          row.dataset.rangeStart = (cap.dmxRange || [0, 255])[0];
+          row.dataset.rangeEnd = (cap.dmxRange || [0, 255])[1];
+          row.style.cursor = 'pointer';
+          row.style.transition = 'background-color 0.2s ease';
+          
+          row.onmouseenter = function() {
+            this.style.backgroundColor = '#363636';
+          };
+          row.onmouseleave = function() {
+            this.style.backgroundColor = 'transparent';
+          };
+          
+          // Range cell
+          const rangeCell = document.createElement('td');
+          rangeCell.style.padding = '10px 8px';
+          rangeCell.style.color = '#ffffff';
+          const range = cap.dmxRange || [0, 255];
+          rangeCell.textContent = `${range[0]} - ${range[1]}`;
+          row.appendChild(rangeCell);
+          
+          // Name cell - dropdown with categories and sub-names (like Lightkey)
+          const nameCell = document.createElement('td');
+          nameCell.style.padding = '10px 8px';
+          
+          const nameSelect = document.createElement('select');
+          nameSelect.className = 'program-name-select';
+          nameSelect.style.width = '100%';
+          nameSelect.style.padding = '6px 8px';
+          nameSelect.style.background = '#1a1a1a';
+          nameSelect.style.border = '1px solid #3b3b3b';
+          nameSelect.style.borderRadius = '4px';
+          nameSelect.style.color = '#ffffff';
+          nameSelect.style.fontSize = '0.9rem';
+          nameSelect.style.cursor = 'pointer';
+          
+          // Get the capability name or generate one
+          let currentName = cap.name || '';
+          if (!currentName || currentName.trim() === '') {
+            if (range[0] === 0 && range[1] <= 10) {
+              currentName = 'Manual Control';
+            } else if (cap.type === 'effect') {
+              currentName = `Program ${index + 1}`;
+            } else {
+              currentName = `Program ${index + 1}`;
+            }
+          }
+          
+          // Common program categories and names (based on OFL patterns and Lightkey)
+          const programCategories = {
+            'Built-in Program': [
+              'Manual Control',
+              'Colors Selection',
+              'Colors Shade, Slow > Fast',
+              'Colors Pulse Transform, Slow > Fast',
+              'Colors Transition, Slow > Fast',
+              'Sound Control',
+              'Auto program 1',
+              'Auto program 2',
+              'Auto program 3',
+              'Auto program 4',
+              'Auto program 5',
+              'Auto program 6',
+              'Auto program 7',
+              'Auto program 8',
+              'Auto program 9',
+              'Auto program 10',
+              'Auto program 11',
+              'Auto program 12',
+              'Auto program 13',
+              'Auto program 14',
+              'Auto program 15',
+              'Auto program 16',
+              'Auto program 17',
+              'Auto program 18',
+              'Auto program 19',
+              'Auto program 20',
+              'Auto program 21',
+              'Auto program 22',
+              'Auto program 23',
+              'Sound program'
+            ],
+            'Color Selection/Shade': [
+              'Color Selection',
+              'Color Shade',
+              'Color Fade',
+              'Color Chase',
+              'Color Wave',
+              'Color Pulse',
+              'Color Transform'
+            ],
+            'Effect': [
+              'Effect 1',
+              'Effect 2',
+              'Effect 3',
+              'Rainbow',
+              'Strobe',
+              'Pulse',
+              'Chase',
+              'Wave',
+              'Sound Active'
+            ]
+          };
+          
+          // Add optgroup for each category
+          Object.keys(programCategories).forEach(category => {
+            const optgroup = document.createElement('optgroup');
+            optgroup.label = category;
+            
+            programCategories[category].forEach(name => {
+              const option = document.createElement('option');
+              option.value = name;
+              option.textContent = name;
+              if (name === currentName) {
+                option.selected = true;
+              }
+              optgroup.appendChild(option);
+            });
+            
+            nameSelect.appendChild(optgroup);
+          });
+          
+          // Add custom option if current name doesn't match any category
+          if (currentName && !Object.values(programCategories).flat().includes(currentName)) {
+            const customOptgroup = document.createElement('optgroup');
+            customOptgroup.label = 'Custom';
+            const customOption = document.createElement('option');
+            customOption.value = currentName;
+            customOption.textContent = currentName;
+            customOption.selected = true;
+            customOptgroup.appendChild(customOption);
+            nameSelect.appendChild(customOptgroup);
+          }
+          
+          // Add "Custom..." option for entering new names
+          const customInputOption = document.createElement('option');
+          customInputOption.value = '__custom__';
+          customInputOption.textContent = 'Custom...';
+          nameSelect.appendChild(customInputOption);
+          
+          // Handle selection change
+          nameSelect.onchange = function() {
+            if (this.value === '__custom__') {
+              // Replace select with input field for custom name
+              const customInput = document.createElement('input');
+              customInput.type = 'text';
+              customInput.value = currentName;
+              customInput.style.width = '100%';
+              customInput.style.padding = '6px 8px';
+              customInput.style.background = '#1a1a1a';
+              customInput.style.border = '1px solid #6366f1';
+              customInput.style.borderRadius = '4px';
+              customInput.style.color = '#ffffff';
+              customInput.style.fontSize = '0.9rem';
+              
+              customInput.onblur = function() {
+                if (this.value.trim()) {
+                  currentName = this.value.trim();
+                  // Rebuild select with new custom value
+                  nameSelect.innerHTML = '';
+                  Object.keys(programCategories).forEach(cat => {
+                    const optgroup = document.createElement('optgroup');
+                    optgroup.label = cat;
+                    programCategories[cat].forEach(name => {
+                      const option = document.createElement('option');
+                      option.value = name;
+                      option.textContent = name;
+                      optgroup.appendChild(option);
+                    });
+                    nameSelect.appendChild(optgroup);
+                  });
+                  const customOptgroup = document.createElement('optgroup');
+                  customOptgroup.label = 'Custom';
+                  const customOption = document.createElement('option');
+                  customOption.value = currentName;
+                  customOption.textContent = currentName;
+                  customOption.selected = true;
+                  customOptgroup.appendChild(customOption);
+                  nameSelect.appendChild(customOptgroup);
+                  const customInputOption2 = document.createElement('option');
+                  customInputOption2.value = '__custom__';
+                  customInputOption2.textContent = 'Custom...';
+                  nameSelect.appendChild(customInputOption2);
+                }
+                nameCell.replaceChild(nameSelect, this);
+              };
+              
+              customInput.onkeypress = function(e) {
+                if (e.key === 'Enter') {
+                  this.blur();
+                }
+              };
+              
+              nameCell.replaceChild(customInput, this);
+              customInput.focus();
+              customInput.select();
+            } else {
+              currentName = this.value;
+              // Store the selected name (could save to fixture definition later)
+              cap.name = currentName;
+            }
+          };
+          
+          nameCell.appendChild(nameSelect);
+          row.appendChild(nameCell);
+          
+          // Action cell with selection indicator
+          const actionCell = document.createElement('td');
+          actionCell.style.padding = '10px 8px';
+          actionCell.style.textAlign = 'right';
+          
+          const selectIndicator = document.createElement('div');
+          selectIndicator.className = 'program-select-indicator';
+          selectIndicator.style.width = '20px';
+          selectIndicator.style.height = '20px';
+          selectIndicator.style.borderRadius = '50%';
+          selectIndicator.style.border = '2px solid #6366f1';
+          selectIndicator.style.background = 'transparent';
+          selectIndicator.style.display = 'inline-block';
+          selectIndicator.style.cursor = 'pointer';
+          selectIndicator.style.position = 'relative';
+          selectIndicator.dataset.selected = 'false';
+          
+          // Add inner circle when selected
+          selectIndicator.onclick = function(e) {
+            e.stopPropagation();
+            const isSelected = this.dataset.selected === 'true';
+            if (isSelected) {
+              this.dataset.selected = 'false';
+              this.style.background = 'transparent';
+              this.querySelector('.program-select-inner')?.remove();
+            } else {
+              // Deselect all other rows
+              tbody.querySelectorAll('.program-select-indicator').forEach(ind => {
+                ind.dataset.selected = 'false';
+                ind.style.background = 'transparent';
+                ind.querySelector('.program-select-inner')?.remove();
+              });
+              
+              this.dataset.selected = 'true';
+              this.style.background = '#6366f1';
+              const inner = document.createElement('div');
+              inner.className = 'program-select-inner';
+              inner.style.width = '10px';
+              inner.style.height = '10px';
+              inner.style.borderRadius = '50%';
+              inner.style.background = '#ffffff';
+              inner.style.position = 'absolute';
+              inner.style.top = '50%';
+              inner.style.left = '50%';
+              inner.style.transform = 'translate(-50%, -50%)';
+              this.appendChild(inner);
+              
+              // Send DMX value for this program (use middle of range)
+              const rangeStart = parseInt(row.dataset.rangeStart);
+              const rangeEnd = parseInt(row.dataset.rangeEnd);
+              const dmxValue = Math.floor((rangeStart + rangeEnd) / 2);
+              sendFixtureDMXChannelValue(group.fixture_name, group.channel, dmxValue);
+            }
+          };
+          
+          actionCell.appendChild(selectIndicator);
+          row.appendChild(actionCell);
+          
+          // Make entire row clickable
+          row.onclick = function() {
+            selectIndicator.onclick({stopPropagation: () => {}});
+          };
+          
+          tbody.appendChild(row);
+        });
+        
+        table.appendChild(tbody);
+        wrapper.appendChild(table);
+        container.appendChild(wrapper);
+      });
+    }
+    
+    function generatePanControls(panDetails) {
+      const container = document.getElementById('panControls');
+      container.innerHTML = '';
+      
+      if (panDetails.length === 0) return;
+      
+      panDetails.forEach(detail => {
+        const wrapper = document.createElement('div');
+        wrapper.style.marginBottom = '16px';
+        
+        const label = document.createElement('label');
+        label.textContent = `${detail.fixture_name} (Ch ${detail.channel}):`;
+        label.style.display = 'block';
+        label.style.marginBottom = '8px';
+        label.style.color = '#a0a0a0';
+        wrapper.appendChild(label);
+        
+        const sliderContainer = document.createElement('div');
+        sliderContainer.className = 'slider-container';
+        
+        const sliderLabel = document.createElement('div');
+        sliderLabel.className = 'slider-label';
+        sliderLabel.innerHTML = '<span>Pan</span><span id="panValue_' + detail.fixture_name + '_' + detail.channel + '">128</span>';
+        sliderContainer.appendChild(sliderLabel);
+        
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.className = 'slider';
+        slider.min = '0';
+        slider.max = '255';
+        slider.value = '128';
+        slider.id = 'panSlider_' + detail.fixture_name + '_' + detail.channel;
+        slider.oninput = function() {
+          const value = parseInt(this.value);
+          document.getElementById('panValue_' + detail.fixture_name + '_' + detail.channel).textContent = value;
+          sendFixtureDMXChannelValue(detail.fixture_name, detail.channel, value);
+        };
+        sliderContainer.appendChild(slider);
+        
+        wrapper.appendChild(sliderContainer);
+        container.appendChild(wrapper);
+      });
+    }
+    
+    function generateTiltControls(tiltDetails) {
+      const container = document.getElementById('tiltControls');
+      container.innerHTML = '';
+      
+      if (tiltDetails.length === 0) return;
+      
+      tiltDetails.forEach(detail => {
+        const wrapper = document.createElement('div');
+        wrapper.style.marginBottom = '16px';
+        
+        const label = document.createElement('label');
+        label.textContent = `${detail.fixture_name} (Ch ${detail.channel}):`;
+        label.style.display = 'block';
+        label.style.marginBottom = '8px';
+        label.style.color = '#a0a0a0';
+        wrapper.appendChild(label);
+        
+        const sliderContainer = document.createElement('div');
+        sliderContainer.className = 'slider-container';
+        
+        const sliderLabel = document.createElement('div');
+        sliderLabel.className = 'slider-label';
+        sliderLabel.innerHTML = '<span>Tilt</span><span id="tiltValue_' + detail.fixture_name + '_' + detail.channel + '">128</span>';
+        sliderContainer.appendChild(sliderLabel);
+        
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.className = 'slider';
+        slider.min = '0';
+        slider.max = '255';
+        slider.value = '128';
+        slider.id = 'tiltSlider_' + detail.fixture_name + '_' + detail.channel;
+        slider.oninput = function() {
+          const value = parseInt(this.value);
+          document.getElementById('tiltValue_' + detail.fixture_name + '_' + detail.channel).textContent = value;
+          sendFixtureDMXChannelValue(detail.fixture_name, detail.channel, value);
+        };
+        sliderContainer.appendChild(slider);
+        
+        wrapper.appendChild(sliderContainer);
+        container.appendChild(wrapper);
+      });
+    }
+    
+    function createRadioOption(name, label, checked, onchange) {
+      const option = document.createElement('div');
+      option.className = 'radio-option';
+      if (checked) option.classList.add('selected');
+      
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = name;
+      input.id = name + '_' + label.toLowerCase().replace(/\\s+/g, '_');
+      input.checked = checked;
+      input.onchange = function() {
+        if (this.checked) {
+          // Remove selected class from siblings
+          const siblings = option.parentElement.querySelectorAll('.radio-option');
+          siblings.forEach(s => s.classList.remove('selected'));
+          option.classList.add('selected');
+          if (onchange) onchange();
+        }
+      };
+      
+      const labelEl = document.createElement('label');
+      labelEl.htmlFor = input.id;
+      labelEl.textContent = label;
+      
+      option.appendChild(input);
+      option.appendChild(labelEl);
+      
+      return option;
+    }
+    
+    function sendFixtureDMXChannelValue(fixtureName, channel, value) {
+      // Send DMX value to a specific fixture channel
+      fetch('/api/fixtures/set_channel_dmx', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          fixture_name: fixtureName,
+          channel: channel,
+          value: value
+        })
+      })
+      .catch(err => {
+        console.error('Error sending DMX value:', err);
+      });
+    }
+    
+    // Generic function to generate slider controls for any capability type
+    function generateSliderControls(type, details) {
+      const containerId = type + 'Controls';
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      
+      container.innerHTML = '';
+      if (details.length === 0) return;
+      
+      const typeLabel = type.replace(/_/g, ' ').replace(/\\b\\w/g, l => l.toUpperCase());
+      
+      details.forEach(detail => {
+        const wrapper = document.createElement('div');
+        wrapper.style.marginBottom = '16px';
+        
+        const label = document.createElement('label');
+        label.textContent = `${detail.fixture_name} (Ch ${detail.channel}):`;
+        label.style.display = 'block';
+        label.style.marginBottom = '8px';
+        label.style.color = '#a0a0a0';
+        wrapper.appendChild(label);
+        
+        const sliderContainer = document.createElement('div');
+        sliderContainer.className = 'slider-container';
+        
+        const sliderLabel = document.createElement('div');
+        sliderLabel.className = 'slider-label';
+        const valueId = type + 'Value_' + detail.fixture_name + '_' + detail.channel;
+        sliderLabel.innerHTML = `<span>${typeLabel}</span><span id="${valueId}">128</span>`;
+        sliderContainer.appendChild(sliderLabel);
+        
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.className = 'slider';
+        slider.min = '0';
+        slider.max = '255';
+        slider.value = '128';
+        slider.id = type + 'Slider_' + detail.fixture_name + '_' + detail.channel;
+        slider.oninput = function() {
+          const value = parseInt(this.value);
+          document.getElementById(valueId).textContent = value;
+          sendFixtureDMXChannelValue(detail.fixture_name, detail.channel, value);
+        };
+        sliderContainer.appendChild(slider);
+        
+        wrapper.appendChild(sliderContainer);
+        container.appendChild(wrapper);
+      });
+    }
+    
+    function generateColorPresetControls(presetDetails) {
+      const container = document.getElementById('colorPresetControls');
+      if (!container) return;
+      
+      container.innerHTML = '';
+      if (presetDetails.length === 0) return;
+      
+      const grouped = {};
+      presetDetails.forEach(detail => {
+        const key = `${detail.fixture_name}_${detail.channel}`;
+        if (!grouped[key]) {
+          grouped[key] = {
+            fixture_name: detail.fixture_name,
+            channel: detail.channel,
+            capabilities: []
+          };
+        }
+        grouped[key].capabilities.push(...detail.capabilities);
+      });
+      
+      Object.values(grouped).forEach(group => {
+        const wrapper = document.createElement('div');
+        wrapper.style.marginBottom = '16px';
+        
+        const label = document.createElement('label');
+        label.textContent = `${group.fixture_name} (Ch ${group.channel}):`;
+        label.style.display = 'block';
+        label.style.marginBottom = '8px';
+        label.style.color = '#a0a0a0';
+        wrapper.appendChild(label);
+        
+        const select = document.createElement('select');
+        select.className = 'program-select';
+        select.id = `color_preset_select_${group.fixture_name}_${group.channel}`;
+        
+        const noneOption = document.createElement('option');
+        noneOption.value = '';
+        noneOption.textContent = 'No Selection';
+        select.appendChild(noneOption);
+        
+        group.capabilities.forEach(cap => {
+          const option = document.createElement('option');
+          const range = cap.dmxRange || [0, 255];
+          const name = cap.name || `Preset (${range[0]}-${range[1]})`;
+          option.value = range[0];
+          option.textContent = name;
+          select.appendChild(option);
+        });
+        
+        select.onchange = function() {
+          if (this.value) {
+            sendFixtureDMXChannelValue(group.fixture_name, group.channel, parseInt(this.value));
+          }
+        };
+        
+        wrapper.appendChild(select);
+        container.appendChild(wrapper);
+      });
+    }
+    
+    function generateGoboControls(goboDetails) {
+      const container = document.getElementById('goboControls');
+      if (!container) return;
+      
+      container.innerHTML = '';
+      if (goboDetails.length === 0) return;
+      
+      const grouped = {};
+      goboDetails.forEach(detail => {
+        const key = `${detail.fixture_name}_${detail.channel}`;
+        if (!grouped[key]) {
+          grouped[key] = {
+            fixture_name: detail.fixture_name,
+            channel: detail.channel,
+            capabilities: []
+          };
+        }
+        grouped[key].capabilities.push(...detail.capabilities);
+      });
+      
+      Object.values(grouped).forEach(group => {
+        const wrapper = document.createElement('div');
+        wrapper.style.marginBottom = '16px';
+        
+        const label = document.createElement('label');
+        label.textContent = `${group.fixture_name} (Ch ${group.channel}):`;
+        label.style.display = 'block';
+        label.style.marginBottom = '8px';
+        label.style.color = '#a0a0a0';
+        wrapper.appendChild(label);
+        
+        const select = document.createElement('select');
+        select.className = 'program-select';
+        select.id = `gobo_select_${group.fixture_name}_${group.channel}`;
+        
+        const noneOption = document.createElement('option');
+        noneOption.value = '';
+        noneOption.textContent = 'No Selection';
+        select.appendChild(noneOption);
+        
+        group.capabilities.forEach(cap => {
+          const option = document.createElement('option');
+          const range = cap.dmxRange || [0, 255];
+          const name = cap.name || `Gobo ${range[0]}`;
+          option.value = range[0];
+          option.textContent = name;
+          select.appendChild(option);
+        });
+        
+        select.onchange = function() {
+          if (this.value) {
+            sendFixtureDMXChannelValue(group.fixture_name, group.channel, parseInt(this.value));
+          }
+        };
+        
+        wrapper.appendChild(select);
+        container.appendChild(wrapper);
+      });
+    }
+    
+    function generateMaintenanceControls(maintenanceDetails) {
+      const container = document.getElementById('maintenanceControls');
+      if (!container) return;
+      
+      container.innerHTML = '';
+      if (maintenanceDetails.length === 0) return;
+      
+      maintenanceDetails.forEach(detail => {
+        const wrapper = document.createElement('div');
+        wrapper.style.marginBottom = '12px';
+        
+        const label = document.createElement('label');
+        label.textContent = `${detail.fixture_name} (Ch ${detail.channel}):`;
+        label.style.display = 'block';
+        label.style.marginBottom = '8px';
+        label.style.color = '#a0a0a0';
+        wrapper.appendChild(label);
+        
+        const button = document.createElement('button');
+        button.className = 'btn';
+        button.textContent = 'Maintenance';
+        button.onclick = function() {
+          // Use a default value (e.g., 128) or the first capability's range start
+          const value = detail.capabilities && detail.capabilities.length > 0 
+            ? (detail.capabilities[0].dmxRange ? detail.capabilities[0].dmxRange[0] : 128)
+            : 128;
+          sendFixtureDMXChannelValue(detail.fixture_name, detail.channel, value);
+        };
+        
+        wrapper.appendChild(button);
+        container.appendChild(wrapper);
+      });
+    }
+    
+    function generateResetControls(resetDetails) {
+      const container = document.getElementById('resetControls');
+      if (!container) return;
+      
+      container.innerHTML = '';
+      if (resetDetails.length === 0) return;
+      
+      resetDetails.forEach(detail => {
+        const wrapper = document.createElement('div');
+        wrapper.style.marginBottom = '12px';
+        
+        const label = document.createElement('label');
+        label.textContent = `${detail.fixture_name} (Ch ${detail.channel}):`;
+        label.style.display = 'block';
+        label.style.marginBottom = '8px';
+        label.style.color = '#a0a0a0';
+        wrapper.appendChild(label);
+        
+        const button = document.createElement('button');
+        button.className = 'btn btn-danger';
+        button.textContent = 'Reset';
+        button.onclick = function() {
+          // Use a default value (e.g., 255) or the first capability's range start
+          const value = detail.capabilities && detail.capabilities.length > 0 
+            ? (detail.capabilities[0].dmxRange ? detail.capabilities[0].dmxRange[0] : 255)
+            : 255;
+          sendFixtureDMXChannelValue(detail.fixture_name, detail.channel, value);
+        };
+        
+        wrapper.appendChild(button);
+        container.appendChild(wrapper);
+      });
+    }
+
+    // Prevent canvas from being dragged when clicking empty space
+    document.getElementById('fixtureCanvas').addEventListener('click', function(e) {
+      if (e.target === this) {
+        document.querySelectorAll('.fixture').forEach(f => f.classList.remove('selected'));
+        selectedGroups.clear();
+        selectedFixtures.clear();
+        // Hide all controls when nothing is selected
+        loadCapabilities();
+      }
+    });
+
+    // ─── Stage Layout System (Lightkey-style) ────────────────────────────────────
+    let currentStageTool = null;
+    let stageElements = {{ stage_layout.get('elements', [])|tojson|safe }};
+    let backgroundImages = {{ stage_layout.get('images', [])|tojson|safe }};
+    let isDrawingShape = false;
+    let drawShapeStart = null;
+    let tempShape = null;
+    let selectedStageElement = null;
+    let stageElementIdCounter = 0;
+    let backgroundImageIdCounter = {{ stage_layout.get('next_image_id', 0)|tojson|safe }};
+
+    // Load and render stage layout on page load
+    function loadStageLayout() {
+      renderBackgroundImages();
+      renderStageElements();
+      // Initialize stageElementIdCounter from existing elements
+      if (stageElements.length > 0) {
+        stageElementIdCounter = Math.max(...stageElements.map(el => {
+          const match = (el.id || '').toString().match(/\\d+$/);
+          return match ? parseInt(match[0]) + 1 : 0;
+        })) || 0;
+      }
+    }
+
+    function renderBackgroundImages() {
+      const imageList = document.getElementById('stageImagesLibrary');
+      
+      // Render image library in sidebar
+      imageList.innerHTML = '';
+      backgroundImages.forEach(img => {
+        const item = document.createElement('div');
+        item.className = 'stage-image-item';
+        
+        const imgEl = document.createElement('img');
+        imgEl.src = img.data;
+        imgEl.id = img.id;
+        imgEl.style.maxHeight = '120px';
+        imgEl.style.objectFit = 'cover';
+        imgEl.draggable = true;
+        imgEl.ondragstart = (e) => handleImageDragStart(e, img.id);
+        
+        const nameEl = document.createElement('div');
+        nameEl.className = 'image-name';
+        nameEl.textContent = img.name || 'Image ' + img.id;
+        
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'stage-image-item-delete';
+        deleteBtn.textContent = '×';
+        deleteBtn.title = 'Delete image';
+        deleteBtn.onclick = (e) => {
+          e.stopPropagation();
+          deleteBackgroundImage(img.id);
+        };
+        
+        item.appendChild(imgEl);
+        item.appendChild(nameEl);
+        item.appendChild(deleteBtn);
+        imageList.appendChild(item);
+      });
+    }
+
+    function deleteBackgroundImage(imageId) {
+      if (confirm('Delete this image? This will also remove any instances of it on the canvas.')) {
+        backgroundImages = backgroundImages.filter(img => img.id !== imageId);
+        // Remove any stage elements using this image
+        stageElements = stageElements.filter(el => !(el.type === 'image' && el.imageId === imageId));
+        renderBackgroundImages();
+        renderStageElements();
+        saveStageLayout();
+      }
+    }
+
+    function renderStageElements() {
+      const elementsLayer = document.getElementById('stageElementsLayer');
+      elementsLayer.innerHTML = '';
+      stageElements.forEach((element, index) => {
+        const el = createStageElement(element, index);
+        elementsLayer.appendChild(el);
+      });
+    }
+
+    function createStageElement(element, index) {
+      const div = document.createElement('div');
+      div.className = 'stage-element';
+      div.dataset.elementId = element.id || ('element_' + index);
+      div.style.left = element.x + 'px';
+      div.style.top = element.y + 'px';
+      
+      if (element.type === 'rectangle') {
+        div.className += ' stage-rectangle';
+        div.style.width = element.width + 'px';
+        div.style.height = element.height + 'px';
+      } else if (element.type === 'line') {
+        div.className += ' stage-line';
+        div.style.width = element.width + 'px';
+        div.style.transform = `rotate(${element.rotation || 0}deg)`;
+        div.style.transformOrigin = 'left center';
+      } else if (element.type === 'image') {
+        div.className += ' stage-image-element';
+        const imgData = backgroundImages.find(img => img.id === element.imageId);
+        if (imgData) {
+          const img = document.createElement('img');
+          img.src = imgData.data;
+          img.style.width = '100%';
+          img.style.height = '100%';
+          img.style.objectFit = 'contain';
+          div.appendChild(img);
+        }
+        div.style.width = (element.width || 200) + 'px';
+        div.style.height = (element.height || 150) + 'px';
+      } else {
+        div.className += ' stage-icon';
+        // Use simple black silhouette icons (Lightkey style)
+        const iconSvgs = {
+          'stage': '<svg viewBox="0 0 100 100" fill="#000000" style="width:100%;height:100%;"><rect x="10" y="60" width="80" height="30" rx="3"/><polygon points="50,20 20,60 80,60"/></svg>',
+          'singer': '<svg viewBox="0 0 100 100" fill="#000000" style="width:100%;height:100%;"><circle cx="50" cy="35" r="15"/><path d="M 50 50 L 50 80 M 35 65 L 65 65 M 25 50 Q 35 45 50 45 Q 65 45 75 50"/></svg>',
+          'musician': '<svg viewBox="0 0 100 100" fill="#000000" style="width:100%;height:100%;"><circle cx="50" cy="35" r="15"/><path d="M 50 50 L 50 80 M 35 65 L 65 65"/><rect x="65" y="45" width="20" height="35" rx="2"/><line x1="75" y1="45" x2="85" y2="35"/></svg>',
+          'dj': '<svg viewBox="0 0 100 100" fill="#000000" style="width:100%;height:100%;"><circle cx="50" cy="35" r="15"/><path d="M 50 50 L 50 80 M 35 65 L 65 65"/><rect x="20" y="45" width="15" height="15" rx="2"/><rect x="65" y="45" width="15" height="15" rx="2"/></svg>',
+          'audience': '<svg viewBox="0 0 100 100" fill="#000000" style="width:100%;height:100%;"><circle cx="30" cy="30" r="10"/><path d="M 30 40 L 30 65 M 20 55 L 40 55"/><circle cx="70" cy="30" r="10"/><path d="M 70 40 L 70 65 M 60 55 L 80 55"/></svg>'
+        };
+        div.innerHTML = iconSvgs[element.type] || '<svg viewBox="0 0 100 100" fill="#000000" style="width:100%;height:100%;"><circle cx="50" cy="50" r="30"/></svg>';
+        // Store original size for resizing (default 50px if not set)
+        if (!element.size) element.size = 50;
+        div.style.width = element.size + 'px';
+        div.style.height = element.size + 'px';
+      }
+      
+      // Add delete button
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'stage-element-delete-btn';
+      deleteBtn.textContent = '×';
+      deleteBtn.title = 'Delete (or press Delete key)';
+      deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        deleteStageElement(element.id || ('element_' + index));
+      };
+      div.appendChild(deleteBtn);
+      
+      // Add resize handles for icon and image types
+      if (element.type !== 'rectangle' && element.type !== 'line') {
+        const handles = ['nw', 'ne', 'sw', 'se'];
+        handles.forEach(pos => {
+          const handle = document.createElement('div');
+          handle.className = 'stage-element-resize-handle ' + pos;
+          handle.onmousedown = (e) => {
+            e.stopPropagation();
+            startStageElementResize(e, div, element, pos);
+          };
+          handle.ontouchstart = (e) => {
+            e.stopPropagation();
+            startStageElementResize(e, div, element, pos);
+          };
+          div.appendChild(handle);
+        });
+      }
+      
+      // For image elements, also store width/height for resize
+      if (element.type === 'image') {
+        if (!element.width) element.width = 200;
+        if (!element.height) element.height = 150;
+      }
+      
+      div.addEventListener('click', (e) => {
+        if (e.target !== deleteBtn) {
+          e.stopPropagation();
+          selectStageElement(div);
+        }
+      });
+      
+      div.addEventListener('mousedown', (e) => {
+        if (currentStageTool === null && e.target !== deleteBtn) {
+          startStageElementDrag(e, div);
+        }
+      });
+      
+      return div;
+    }
+    
+    function deleteStageElement(elementId) {
+      const index = stageElements.findIndex(el => (el.id || '') === elementId);
+      if (index !== -1) {
+        stageElements.splice(index, 1);
+        renderStageElements();
+        saveStageLayout();
+        selectedStageElement = null;
+      }
+    }
+
+    function setStageTool(tool) {
+      if (tool === 'background') {
+        document.getElementById('backgroundUpload').click();
+        return;
+      }
+      currentStageTool = currentStageTool === tool ? null : tool;
+      // Update active state in sidebar
+      document.querySelectorAll('.stage-shape-item').forEach(item => {
+        if (item.dataset.tool === tool && currentStageTool === tool) {
+          item.classList.add('active');
+        } else {
+          item.classList.remove('active');
+        }
+      });
+    }
+    
+    // Drag and drop handlers
+    function handleShapeDragStart(event) {
+      const shapeType = event.currentTarget.dataset.type;
+      event.dataTransfer.setData('text/plain', shapeType);
+      event.dataTransfer.effectAllowed = 'copy';
+    }
+    
+    function handleImageDragStart(event, imageId) {
+      event.dataTransfer.setData('text/plain', 'background:' + imageId);
+      event.dataTransfer.effectAllowed = 'copy';
+      event.stopPropagation();
+    }
+    
+    // Handle drop on canvas
+    const canvas = document.getElementById('fixtureCanvas');
+    canvas.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    });
+    
+    canvas.addEventListener('drop', function(e) {
+      e.preventDefault();
+      const canvasRect = this.getBoundingClientRect();
+      const x = e.clientX - canvasRect.left;
+      const y = e.clientY - canvasRect.top;
+      const data = e.dataTransfer.getData('text/plain');
+      
+      if (data.startsWith('background:')) {
+        const imageId = data.split(':')[1];
+        // Place image as separate element on canvas
+        const imgData = backgroundImages.find(img => img.id === imageId);
+        if (imgData) {
+          const element = {
+            id: 'element_' + (stageElementIdCounter++),
+            type: 'image',
+            imageId: imageId,
+            x: x - 100,
+            y: y - 75,
+            width: 200,
+            height: 150
+          };
+          stageElements.push(element);
+          renderStageElements();
+          saveStageLayout();
+        }
+      } else if (['stage', 'singer', 'musician', 'dj', 'audience', 'rectangle', 'line'].includes(data)) {
+        if (data === 'rectangle' || data === 'line') {
+          // For drawing tools, just activate the tool
+          setStageTool(data);
+        } else {
+          // Place icon at drop location
+          const element = {
+            id: 'element_' + (stageElementIdCounter++),
+            type: data,
+            x: x - 25,
+            y: y - 25,
+            size: 50
+          };
+          stageElements.push(element);
+          renderStageElements();
+          saveStageLayout();
+        }
+      }
+    });
+
+    function handleBackgroundUpload(event) {
+      const files = event.target.files;
+      if (!files || files.length === 0) return;
+      
+      Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const imageData = {
+            id: 'img_' + (backgroundImageIdCounter++),
+            name: file.name,
+            data: e.target.result,
+            type: file.type
+          };
+          backgroundImages.push(imageData);
+          renderBackgroundImages();
+          saveStageLayout();
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // Handle canvas clicks for placing stage elements (when tool is active)
+    canvas.addEventListener('click', function(e) {
+      if (currentStageTool && ['stage', 'singer', 'musician', 'dj', 'audience'].includes(currentStageTool)) {
+        const canvasRect = this.getBoundingClientRect();
+        const x = e.clientX - canvasRect.left;
+        const y = e.clientY - canvasRect.top;
+        const element = {
+          id: 'element_' + (stageElementIdCounter++),
+          type: currentStageTool,
+          x: x - 25,
+          y: y - 25,
+          size: 50
+        };
+        stageElements.push(element);
+        renderStageElements();
+        saveStageLayout();
+        currentStageTool = null;
+        document.querySelectorAll('.stage-shape-item').forEach(item => item.classList.remove('active'));
+      }
+    });
+
+    // Drawing tools (rectangle and line)
+    canvas.addEventListener('mousedown', function(e) {
+      if (currentStageTool === 'rectangle' || currentStageTool === 'line') {
+        isDrawingShape = true;
+        const canvasRect = this.getBoundingClientRect();
+        drawShapeStart = {x: e.clientX - canvasRect.left, y: e.clientY - canvasRect.top};
+        e.preventDefault();
+      }
+    });
+
+    canvas.addEventListener('mousemove', function(e) {
+      if (isDrawingShape && drawShapeStart) {
+        const canvasRect = this.getBoundingClientRect();
+        const currentX = e.clientX - canvasRect.left;
+        const currentY = e.clientY - canvasRect.top;
+        if (tempShape) tempShape.remove();
+        tempShape = document.createElement('div');
+        tempShape.style.position = 'absolute';
+        tempShape.style.pointerEvents = 'none';
+        tempShape.style.zIndex = '999';
+        if (currentStageTool === 'rectangle') {
+          tempShape.className = 'stage-rectangle';
+          const left = Math.min(drawShapeStart.x, currentX);
+          const top = Math.min(drawShapeStart.y, currentY);
+          tempShape.style.left = left + 'px';
+          tempShape.style.top = top + 'px';
+          tempShape.style.width = Math.abs(currentX - drawShapeStart.x) + 'px';
+          tempShape.style.height = Math.abs(currentY - drawShapeStart.y) + 'px';
+        } else if (currentStageTool === 'line') {
+          tempShape.className = 'stage-line';
+          const left = Math.min(drawShapeStart.x, currentX);
+          const top = drawShapeStart.y;
+          const width = Math.abs(currentX - drawShapeStart.x);
+          const angle = Math.atan2(currentY - drawShapeStart.y, currentX - drawShapeStart.x) * 180 / Math.PI;
+          tempShape.style.left = left + 'px';
+          tempShape.style.top = top + 'px';
+          tempShape.style.width = width + 'px';
+          tempShape.style.transform = `rotate(${angle}deg)`;
+          tempShape.style.transformOrigin = 'left center';
+        }
+        document.getElementById('stageElementsLayer').appendChild(tempShape);
+      }
+    });
+
+    canvas.addEventListener('mouseup', function(e) {
+      if (isDrawingShape && drawShapeStart && tempShape) {
+        const canvasRect = this.getBoundingClientRect();
+        const endX = e.clientX - canvasRect.left;
+        const endY = e.clientY - canvasRect.top;
+        const element = {
+          id: 'element_' + (stageElementIdCounter++),
+          type: currentStageTool,
+          x: Math.min(drawShapeStart.x, endX),
+          y: Math.min(drawShapeStart.y, endY),
+          width: Math.abs(endX - drawShapeStart.x),
+          height: Math.abs(endY - drawShapeStart.y)
+        };
+        if (currentStageTool === 'line') {
+          element.rotation = Math.atan2(endY - drawShapeStart.y, endX - drawShapeStart.x) * 180 / Math.PI;
+        }
+        stageElements.push(element);
+        tempShape.remove();
+        tempShape = null;
+        renderStageElements();
+        saveStageLayout();
+        currentStageTool = null;
+        document.querySelectorAll('.stage-shape-item').forEach(item => item.classList.remove('active'));
+        isDrawingShape = false;
+        drawShapeStart = null;
+      }
+    });
+
+    function selectStageElement(element) {
+      document.querySelectorAll('.stage-element').forEach(el => el.classList.remove('selected'));
+      element.classList.add('selected');
+      selectedStageElement = element;
+    }
+    
+    function deleteSelectedStageElement() {
+      if (selectedStageElement) {
+        const elementId = selectedStageElement.dataset.elementId;
+        deleteStageElement(elementId);
+      } else {
+        alert('Please select a stage element to delete first.');
+      }
+    }
+    
+    // Add keyboard support for deleting selected elements
+    document.addEventListener('keydown', function(e) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedStageElement && currentStageTool === null) {
+        e.preventDefault();
+        const elementId = selectedStageElement.dataset.elementId;
+        deleteStageElement(elementId);
+      }
+    });
+
+    let isResizingStageElement = false;
+    let resizeElementStart = null;
+    let resizeHandlePos = null;
+    
+    function startStageElementResize(e, element, elementData, handlePos) {
+      e.preventDefault();
+      e.stopPropagation();
+      isResizingStageElement = true;
+      resizeHandlePos = handlePos;
+      const canvasRect = document.getElementById('fixtureCanvas').getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      resizeElementStart = {
+        x: clientX - canvasRect.left,
+        y: clientY - canvasRect.top,
+        startSize: elementData.size || 50,
+        startWidth: elementData.width || 200,
+        startHeight: elementData.height || 150,
+        startX: elementData.x,
+        startY: elementData.y
+      };
+    }
+    
+    function handleStageElementResize(e) {
+      if (!isResizingStageElement || !resizeElementStart || !selectedStageElement) return;
+      const canvasRect = document.getElementById('fixtureCanvas').getBoundingClientRect();
+      const clientX = (e.touches ? e.touches[0].clientX : e.clientX) - canvasRect.left;
+      const clientY = (e.touches ? e.touches[0].clientY : e.clientY) - canvasRect.top;
+      const deltaX = clientX - resizeElementStart.x;
+      const deltaY = clientY - resizeElementStart.y;
+      const delta = Math.max(Math.abs(deltaX), Math.abs(deltaY));
+      
+      const elementId = selectedStageElement.dataset.elementId;
+      const index = stageElements.findIndex(el => (el.id || '') === elementId);
+      if (index === -1) return;
+      
+      const elementData = stageElements[index];
+      if (elementData.type === 'image') {
+        // For images, resize width and height separately based on handle position
+        let newWidth = resizeElementStart.startWidth;
+        let newHeight = resizeElementStart.startHeight;
+        if (resizeHandlePos === 'se') {
+          // South-east: increase both width and height
+          newWidth = Math.max(50, Math.min(800, resizeElementStart.startWidth + deltaX));
+          newHeight = Math.max(50, Math.min(600, resizeElementStart.startHeight + deltaY));
+        } else if (resizeHandlePos === 'ne') {
+          // North-east: increase width, decrease height
+          newWidth = Math.max(50, Math.min(800, resizeElementStart.startWidth + deltaX));
+          newHeight = Math.max(50, Math.min(600, resizeElementStart.startHeight - deltaY));
+        } else if (resizeHandlePos === 'sw') {
+          // South-west: decrease width, increase height
+          newWidth = Math.max(50, Math.min(800, resizeElementStart.startWidth - deltaX));
+          newHeight = Math.max(50, Math.min(600, resizeElementStart.startHeight + deltaY));
+        } else if (resizeHandlePos === 'nw') {
+          // North-west: decrease both width and height
+          newWidth = Math.max(50, Math.min(800, resizeElementStart.startWidth - deltaX));
+          newHeight = Math.max(50, Math.min(600, resizeElementStart.startHeight - deltaY));
+        }
+        elementData.width = newWidth;
+        elementData.height = newHeight;
+        selectedStageElement.style.width = newWidth + 'px';
+        selectedStageElement.style.height = newHeight + 'px';
+      } else {
+        // For icons, use size (square)
+        let newSize = resizeElementStart.startSize;
+        if (resizeHandlePos === 'se' || resizeHandlePos === 'ne') {
+          newSize = Math.max(20, Math.min(200, resizeElementStart.startSize + delta));
+        } else {
+          newSize = Math.max(20, Math.min(200, resizeElementStart.startSize - delta));
+        }
+        elementData.size = newSize;
+        selectedStageElement.style.width = newSize + 'px';
+        selectedStageElement.style.height = newSize + 'px';
+      }
+    }
+    
+    document.addEventListener('mousemove', handleStageElementResize);
+    document.addEventListener('touchmove', handleStageElementResize, {passive: false});
+    
+    function stopStageElementResize() {
+      if (isResizingStageElement) {
+        isResizingStageElement = false;
+        resizeElementStart = null;
+        resizeHandlePos = null;
+        saveStageLayout();
+      }
+    }
+    
+    document.addEventListener('mouseup', stopStageElementResize);
+    document.addEventListener('touchend', stopStageElementResize);
+    
+    function startStageElementDrag(e, element) {
+      // Don't start drag if clicking on resize handle
+      if (e.target.classList.contains('stage-element-resize-handle')) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      element.classList.add('dragging');
+      const canvasRect = document.getElementById('fixtureCanvas').getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const startX = clientX - canvasRect.left - element.offsetLeft;
+      const startY = clientY - canvasRect.top - element.offsetTop;
+      function drag(e) {
+        const canvasRect = document.getElementById('fixtureCanvas').getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        element.style.left = (clientX - canvasRect.left - startX) + 'px';
+        element.style.top = (clientY - canvasRect.top - startY) + 'px';
+      }
+      function stopDrag(e) {
+        element.classList.remove('dragging');
+        const elementId = element.dataset.elementId;
+        const index = stageElements.findIndex(el => (el.id || '') === elementId);
+        if (index !== -1) {
+          stageElements[index].x = parseInt(element.style.left);
+          stageElements[index].y = parseInt(element.style.top);
+          saveStageLayout();
+        }
+        document.removeEventListener('mousemove', drag);
+        document.removeEventListener('mouseup', stopDrag);
+        document.removeEventListener('touchmove', drag);
+        document.removeEventListener('touchend', stopDrag);
+      }
+      document.addEventListener('mousemove', drag);
+      document.addEventListener('mouseup', stopDrag);
+      document.addEventListener('touchmove', drag, {passive: false});
+      document.addEventListener('touchend', stopDrag);
+    }
+
+    function clearStageLayout() {
+      if (confirm('Clear all stage layout elements? This cannot be undone.')) {
+        stageElements = [];
+        backgroundImages = [];
+        saveStageLayout();
+        loadStageLayout();
+      }
+    }
+
+    function saveStageLayout() {
+      fetch('/api/stage_layout/save', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          images: backgroundImages,
+          selected_background_id: null,
+          background_transform: {x: 0, y: 0, width: 800, height: 600, scale: 1},
+          elements: stageElements,
+          next_image_id: backgroundImageIdCounter
+        })
+      }).catch(err => console.error('Error saving stage layout:', err));
+    }
+
+    // Initialize stage layout on page load
+    loadStageLayout();
+  </script>
+{% endblock %}

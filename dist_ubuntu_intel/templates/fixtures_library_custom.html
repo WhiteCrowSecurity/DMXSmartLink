@@ -1,0 +1,575 @@
+{% extends "base.html" %}
+
+{% block title %}Create Custom Fixture - DMXSmartLink Hub{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .channel-mapping-item {
+      display: block;
+      padding: 0;
+      background-color: transparent;
+      border: none;
+      margin-bottom: 16px;
+    }
+    .channel-mapping-item input,
+    .channel-mapping-item select {
+      margin: 0;
+      background-color: #2d2d2d !important;
+      color: #ffffff !important;
+      border: 1px solid #3b3b3b !important;
+      padding: 8px 12px !important;
+      border-radius: 6px !important;
+      font-size: 0.9rem !important;
+    }
+    .channel-mapping-item select {
+      flex: 1;
+      appearance: auto !important;
+      -webkit-appearance: menulist !important;
+      -moz-appearance: menulist !important;
+      min-width: 120px;
+    }
+    .channel-mapping-item input[type="number"] {
+      width: 80px;
+      flex: 0 0 80px;
+    }
+    .channel-mapping-item .remove-btn {
+      padding: 8px 16px;
+      background: #ef4444;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .channel-mapping-item .remove-btn:hover {
+      background: #dc2626;
+    }
+    .add-channel-btn {
+      padding: 10px 20px;
+      background: #10b981;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      margin-top: 12px;
+    }
+    .add-channel-btn:hover {
+      background: #059669;
+    }
+    .channel-mapping-list {
+      margin-top: 16px;
+    }
+    .channel-capabilities-list {
+      margin-top: 8px;
+      margin-left: 20px;
+      border-left: 2px solid #3b3b3b;
+      padding-left: 16px;
+    }
+    .capability-item {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 8px;
+      background-color: #1a1a1a;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      border: 1px solid #3b3b3b;
+    }
+    .capability-item input,
+    .capability-item select {
+      margin: 0;
+      background-color: #2d2d2d !important;
+      color: #ffffff !important;
+      border: 1px solid #3b3b3b !important;
+      padding: 6px 10px !important;
+      border-radius: 4px !important;
+      font-size: 0.85rem !important;
+    }
+    .capability-item input[type="number"] {
+      width: 70px;
+      flex: 0 0 70px;
+    }
+    .capability-item input[type="text"] {
+      flex: 1;
+      min-width: 150px;
+    }
+    .capability-item select {
+      flex: 1;
+      min-width: 120px;
+    }
+    .capability-item .cap-name-select {
+      flex: 1;
+      min-width: 180px;
+    }
+    .capability-item .remove-capability-btn {
+      padding: 6px 12px;
+      background: #ef4444;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .add-capability-btn {
+      padding: 6px 12px;
+      background: #10b981;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      margin-top: 8px;
+    }
+    .channel-item-header {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      background-color: #252525;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      border: 1px solid #3b3b3b;
+    }
+    .channel-item-header input[type="number"] {
+      width: 100px;
+      flex: 0 0 100px;
+    }
+    .mode-toggle-btn {
+      padding: 6px 12px;
+      background: #6366f1;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      margin-left: auto;
+    }
+    .mode-toggle-btn:hover {
+      background: #4f46e5;
+    }
+    .mode-toggle-btn.simple {
+      background: #10b981;
+    }
+    .channel-simple-content {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      background-color: #1a1a1a;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <a href="{{ url_for('fixtures_library_view') }}" class="back-link">← Back to Fixture Library</a>
+    <h1>Create Custom Fixture</h1>
+    
+    <div class="card">
+      <p style="color: #a0a0a0; margin-bottom: 20px;">
+        Create a custom fixture definition that can be reused to create fixture instances.
+        This is useful for fixtures not yet available in OFL or custom fixtures.
+      </p>
+      
+      <form id="createCustomFixtureForm">
+        <div class="form-group">
+          <label for="manufacturer">Manufacturer:</label>
+          <input type="text" id="manufacturer" placeholder="e.g., Generic, Custom" required>
+        </div>
+        
+        <div class="form-group">
+          <label for="name">Model/Name:</label>
+          <input type="text" id="name" placeholder="e.g., RGB Fader, Custom Moving Head" required>
+        </div>
+        
+        <div class="form-group">
+          <label for="description">Description (Optional):</label>
+          <input type="text" id="description" placeholder="Brief description of the fixture">
+        </div>
+        
+        <div class="form-group">
+          <label>Channel Mapping:</label>
+          <p style="color: #a0a0a0; font-size: 0.85rem; margin-bottom: 12px;">
+            Define what each DMX channel does. Use "Advanced Mode" for channels with multiple DMX ranges (e.g., different functions at different DMX values).
+          </p>
+          <div id="channelMappingList" class="channel-mapping-list">
+            <!-- Channel mappings will be added here dynamically -->
+          </div>
+          <button type="button" class="add-channel-btn" onclick="addChannelMapping()">+ Add Channel</button>
+        </div>
+        
+        <div class="action-buttons" style="margin-top: 24px;">
+          <button type="button" onclick="createCustomFixture()" class="btn">Create Custom Fixture</button>
+          <a href="{{ url_for('fixtures_library_view') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const SUPPORTED_CHANNEL_TYPES = {{ supported_channel_types|tojson|safe }};
+    let channelMappingCounter = 0;
+
+    function addChannelMapping(channel = null, mode = 'simple', type = 'red', min = 0, max = 255) {
+      const list = document.getElementById('channelMappingList');
+      const item = document.createElement('div');
+      item.className = 'channel-mapping-item';
+      item.dataset.index = channelMappingCounter++;
+      item.dataset.mode = mode;
+      
+      // Header with channel number and mode toggle
+      const header = document.createElement('div');
+      header.className = 'channel-item-header';
+      
+      const channelLabel = document.createElement('label');
+      channelLabel.textContent = 'Channel:';
+      channelLabel.style.minWidth = '80px';
+      channelLabel.style.color = '#a0a0a0';
+      
+      const channelInput = document.createElement('input');
+      channelInput.type = 'number';
+      channelInput.className = 'channel-number-input';
+      channelInput.min = '1';
+      channelInput.max = '512';
+      channelInput.required = true;
+      channelInput.value = channel || '';
+      
+      const modeToggle = document.createElement('button');
+      modeToggle.type = 'button';
+      modeToggle.className = 'mode-toggle-btn ' + mode;
+      modeToggle.textContent = mode === 'simple' ? 'Switch to Advanced Mode' : 'Switch to Simple Mode';
+      modeToggle.onclick = function() { toggleChannelMode(item); };
+      
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'remove-btn';
+      removeBtn.textContent = 'Remove';
+      removeBtn.onclick = function() { item.remove(); };
+      
+      header.appendChild(channelLabel);
+      header.appendChild(channelInput);
+      header.appendChild(modeToggle);
+      header.appendChild(removeBtn);
+      item.appendChild(header);
+      
+      // Simple mode content
+      const simpleContent = document.createElement('div');
+      simpleContent.className = 'channel-simple-content';
+      if (mode !== 'simple') simpleContent.style.display = 'none';
+      
+      const simpleTypeLabel = document.createElement('label');
+      simpleTypeLabel.textContent = 'Type:';
+      simpleTypeLabel.style.minWidth = '100px';
+      simpleTypeLabel.style.color = '#a0a0a0';
+      
+      const typeSelect = document.createElement('select');
+      SUPPORTED_CHANNEL_TYPES.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        if (t === type) opt.selected = true;
+        typeSelect.appendChild(opt);
+      });
+      
+      const minLabel = document.createElement('label');
+      minLabel.textContent = 'Min:';
+      minLabel.style.minWidth = '60px';
+      minLabel.style.color = '#a0a0a0';
+      
+      const minInput = document.createElement('input');
+      minInput.type = 'number';
+      minInput.min = '0';
+      minInput.max = '255';
+      minInput.value = min;
+      
+      const maxLabel = document.createElement('label');
+      maxLabel.textContent = 'Max:';
+      maxLabel.style.minWidth = '60px';
+      maxLabel.style.color = '#a0a0a0';
+      
+      const maxInput = document.createElement('input');
+      maxInput.type = 'number';
+      maxInput.min = '0';
+      maxInput.max = '255';
+      maxInput.value = max;
+      
+      simpleContent.appendChild(simpleTypeLabel);
+      simpleContent.appendChild(typeSelect);
+      simpleContent.appendChild(minLabel);
+      simpleContent.appendChild(minInput);
+      simpleContent.appendChild(maxLabel);
+      simpleContent.appendChild(maxInput);
+      item.appendChild(simpleContent);
+      
+      // Advanced mode content (capabilities list)
+      const advancedContent = document.createElement('div');
+      advancedContent.className = 'channel-capabilities-list';
+      if (mode === 'simple') advancedContent.style.display = 'none';
+      
+      const addCapabilityBtn = document.createElement('button');
+      addCapabilityBtn.type = 'button';
+      addCapabilityBtn.className = 'add-capability-btn';
+      addCapabilityBtn.textContent = '+ Add Capability';
+      addCapabilityBtn.onclick = function() { addCapability(advancedContent); };
+      advancedContent.appendChild(addCapabilityBtn);
+      
+      item.appendChild(advancedContent);
+      
+      // If advanced mode, add one default capability
+      if (mode === 'advanced') {
+        addCapability(advancedContent, type, min, max);
+      }
+      
+      list.appendChild(item);
+    }
+    
+    function toggleChannelMode(item) {
+      const currentMode = item.dataset.mode;
+      const newMode = currentMode === 'simple' ? 'advanced' : 'simple';
+      item.dataset.mode = newMode;
+      
+      const simpleContent = item.querySelector('.channel-simple-content');
+      const advancedContent = item.querySelector('.channel-capabilities-list');
+      const modeToggle = item.querySelector('.mode-toggle-btn');
+      
+      if (newMode === 'simple') {
+        simpleContent.style.display = 'flex';
+        advancedContent.style.display = 'none';
+        modeToggle.textContent = 'Switch to Advanced Mode';
+        modeToggle.className = 'mode-toggle-btn simple';
+        // Clear advanced content (or keep it for undo?)
+        advancedContent.innerHTML = '<button type="button" class="add-capability-btn" onclick="addCapability(this.parentElement)">+ Add Capability</button>';
+      } else {
+        simpleContent.style.display = 'none';
+        advancedContent.style.display = 'block';
+        modeToggle.textContent = 'Switch to Simple Mode';
+        modeToggle.className = 'mode-toggle-btn';
+        // Add one default capability if none exist
+        if (advancedContent.querySelectorAll('.capability-item').length === 0) {
+          const typeSelect = simpleContent.querySelector('select');
+          const inputs = simpleContent.querySelectorAll('input[type="number"]');
+          const type = typeSelect ? typeSelect.value : 'red';
+          const min = inputs.length > 0 ? parseInt(inputs[0].value) || 0 : 0;
+          const max = inputs.length > 1 ? parseInt(inputs[1].value) || 255 : 255;
+          addCapability(advancedContent, type, min, max);
+        }
+      }
+    }
+    
+    function addCapability(container, type = 'red', rangeMin = 0, rangeMax = 255, name = '') {
+      const capItem = document.createElement('div');
+      capItem.className = 'capability-item';
+      
+      const rangeMinLabel = document.createElement('label');
+      rangeMinLabel.textContent = 'Range Min:';
+      rangeMinLabel.style.minWidth = '90px';
+      rangeMinLabel.style.color = '#a0a0a0';
+      
+      const rangeMinInput = document.createElement('input');
+      rangeMinInput.type = 'number';
+      rangeMinInput.className = 'cap-range-min';
+      rangeMinInput.min = '0';
+      rangeMinInput.max = '255';
+      rangeMinInput.value = rangeMin;
+      
+      const rangeMaxLabel = document.createElement('label');
+      rangeMaxLabel.textContent = 'Range Max:';
+      rangeMaxLabel.style.minWidth = '90px';
+      rangeMaxLabel.style.color = '#a0a0a0';
+      
+      const rangeMaxInput = document.createElement('input');
+      rangeMaxInput.type = 'number';
+      rangeMaxInput.className = 'cap-range-max';
+      rangeMaxInput.min = '0';
+      rangeMaxInput.max = '255';
+      rangeMaxInput.value = rangeMax;
+      
+      const typeLabel = document.createElement('label');
+      typeLabel.textContent = 'Type:';
+      typeLabel.style.minWidth = '80px';
+      typeLabel.style.color = '#a0a0a0';
+      
+      const typeSelect = document.createElement('select');
+      typeSelect.className = 'cap-type';
+      SUPPORTED_CHANNEL_TYPES.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        if (t === type) opt.selected = true;
+        typeSelect.appendChild(opt);
+      });
+      
+      const nameLabel = document.createElement('label');
+      nameLabel.textContent = 'Name (optional):';
+      nameLabel.style.minWidth = '120px';
+      nameLabel.style.color = '#a0a0a0';
+      
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.className = 'cap-name';
+      nameInput.placeholder = 'e.g., Shutter Open, Strobe';
+      nameInput.value = name;
+      
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'remove-capability-btn';
+      removeBtn.textContent = 'Remove';
+      removeBtn.onclick = function() { capItem.remove(); };
+      
+      capItem.appendChild(rangeMinLabel);
+      capItem.appendChild(rangeMinInput);
+      capItem.appendChild(rangeMaxLabel);
+      capItem.appendChild(rangeMaxInput);
+      capItem.appendChild(typeLabel);
+      capItem.appendChild(typeSelect);
+      capItem.appendChild(nameLabel);
+      capItem.appendChild(nameInput);
+      capItem.appendChild(removeBtn);
+      
+      // Insert before the "Add Capability" button
+      const addBtn = container.querySelector('.add-capability-btn');
+      container.insertBefore(capItem, addBtn);
+    }
+
+    function createCustomFixture() {
+      const manufacturer = document.getElementById('manufacturer').value;
+      const name = document.getElementById('name').value;
+      const description = document.getElementById('description').value;
+      
+      if (!manufacturer || !name) {
+        alert('Please enter manufacturer and model/name.');
+        return;
+      }
+      
+      const channelItems = document.querySelectorAll('#channelMappingList .channel-mapping-item');
+      if (channelItems.length === 0) {
+        alert('Please add at least one channel mapping.');
+        return;
+      }
+      
+      const channelMapping = [];
+      const channels = new Set();
+      
+      for (let channelItem of channelItems) {
+        const channelInput = channelItem.querySelector('.channel-number-input');
+        const channel = parseInt(channelInput.value);
+        
+        if (!channel || channel < 1 || channel > 512) {
+          alert('Each channel must be between 1 and 512.');
+          return;
+        }
+        
+        if (channels.has(channel)) {
+          alert('Channel ' + channel + ' is used more than once. Each channel can only be used once per fixture.');
+          return;
+        }
+        channels.add(channel);
+        
+        const mode = channelItem.dataset.mode || 'simple';
+        
+        if (mode === 'simple') {
+          // Simple format
+          const simpleContent = channelItem.querySelector('.channel-simple-content');
+          const typeSelect = simpleContent.querySelector('select');
+          const inputs = simpleContent.querySelectorAll('input[type="number"]');
+          const min = parseInt(inputs[0].value) || 0;
+          const max = parseInt(inputs[1].value) || 255;
+          
+          if (min > max) {
+            alert('Channel ' + channel + ': Min cannot be greater than Max.');
+            return;
+          }
+          
+          channelMapping.push({
+            channel: channel,
+            type: typeSelect.value,
+            min: min,
+            max: max
+          });
+        } else {
+          // Advanced format (capabilities)
+          const capabilityItems = channelItem.querySelectorAll('.capability-item');
+          if (capabilityItems.length === 0) {
+            alert('Channel ' + channel + ': Advanced mode requires at least one capability.');
+            return;
+          }
+          
+          const capabilities = [];
+          for (let capItem of capabilityItems) {
+            const rangeMin = parseInt(capItem.querySelector('.cap-range-min').value);
+            const rangeMax = parseInt(capItem.querySelector('.cap-range-max').value);
+            const type = capItem.querySelector('.cap-type').value;
+            // Handle both text input and select dropdown for name
+            const nameField = capItem.querySelector('.cap-name, .cap-name-select');
+            const name = nameField ? (nameField.tagName === 'SELECT' ? nameField.value : nameField.value.trim()) : '';
+            
+            if (isNaN(rangeMin) || isNaN(rangeMax) || rangeMin < 0 || rangeMax > 255 || rangeMin > rangeMax) {
+              alert('Channel ' + channel + ': Invalid DMX range (must be 0-255, min <= max).');
+              return;
+            }
+            
+            const capability = {
+              dmxRange: [rangeMin, rangeMax],
+              type: type
+            };
+            if (name) {
+              capability.name = name;
+            }
+            capabilities.push(capability);
+          }
+          
+          // Sort capabilities by range start
+          capabilities.sort((a, b) => a.dmxRange[0] - b.dmxRange[0]);
+          
+          channelMapping.push({
+            channel: channel,
+            capabilities: capabilities
+          });
+        }
+      }
+      
+      // Sort by channel number
+      channelMapping.sort((a, b) => a.channel - b.channel);
+      
+      fetch('/api/fixtures/library/create_custom', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          manufacturer: manufacturer,
+          name: name,
+          description: description,
+          channel_mapping: channelMapping
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert('Custom fixture created successfully!');
+          window.location.href = '/fixtures/library';
+        } else {
+          alert('Error: ' + (data.error || 'Failed to create custom fixture'));
+        }
+      })
+      .catch(err => {
+        console.error('Error:', err);
+        alert('Error creating custom fixture');
+      });
+    }
+    
+    // Add default channel mappings on page load
+    window.onload = function() {
+      if (document.querySelectorAll('#channelMappingList .channel-mapping-item').length === 0) {
+        addChannelMapping(1, 'simple', 'red', 0, 255);
+        addChannelMapping(2, 'simple', 'green', 0, 255);
+        addChannelMapping(3, 'simple', 'blue', 0, 255);
+        addChannelMapping(4, 'simple', 'brightness', 0, 255);
+        addChannelMapping(5, 'simple', 'color_temp', 0, 255);
+      }
+    };
+  </script>
+{% endblock %}
