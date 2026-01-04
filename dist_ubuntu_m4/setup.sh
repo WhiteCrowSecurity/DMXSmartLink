@@ -422,7 +422,7 @@ create_venv_and_install() {
     '$PYTHON_BIN' -m venv .venv
     source .venv/bin/activate
     pip install -U pip
-    pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial
+    pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial psutil
   "
   echo
 }

@@ -410,7 +410,7 @@ except:
   else
     log "    ✓ Homebridge container recreated"
   fi
-  
+    
   # Install Govee plugin (only if container exists)
   if docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
     log "    Installing/updating Govee plugin..."
