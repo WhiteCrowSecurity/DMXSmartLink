@@ -268,58 +268,23 @@ PY
     exit 1
   fi
 
-  log "    Copying files from $DIST_DIR into $TARGET_DIR..."
-  local items=(
-    artnet_controller.py config_loader.py device_inventory.py device_registry.py group_init.py group_manager.py main.py
-    dmx_usb_controller.py visual_control_worker.py
-    license_status.txt HOMEBRIDGE_LICENSE.txt LICENSE.txt README.txt
-  )
-  
-  # Copy standard files
-  for it in "${items[@]}"; do
-    if [ -e "$SRC_DIR/$it" ]; then
-      if [ -d "$SRC_DIR/$it" ]; then
-        rm -rf "$TARGET_DIR/$it"
-        cp -a "$SRC_DIR/$it" "$TARGET_DIR/"
-        log "    ✓ Copied directory: $it"
-      else
-        cp -a "$SRC_DIR/$it" "$TARGET_DIR/"
-        log "    ✓ Copied file: $it"
-      fi
-    else
-      log "    ⚠ $it not found in $DIST_DIR, skipping."
-    fi
-  done
-  
-  # Dynamically find and copy PyArmor Pro runtime folder (pyarmor_runtime_XXXXX)
-  log "    Finding PyArmor Pro runtime folder..."
-  local pyarmor_runtime=""
-  for dir in "$SRC_DIR"/pyarmor_runtime_*; do
-    if [ -d "$dir" ]; then
-      pyarmor_runtime="$(basename "$dir")"
-      rm -rf "$TARGET_DIR/$pyarmor_runtime"
-      cp -a "$dir" "$TARGET_DIR/"
-      log "    ✓ Copied PyArmor Pro runtime: $pyarmor_runtime"
-      
-      # Ensure .so file has correct permissions (executable and readable)
-      if [ -f "$TARGET_DIR/$pyarmor_runtime/pyarmor_runtime.so" ]; then
-        chmod 755 "$TARGET_DIR/$pyarmor_runtime/pyarmor_runtime.so"
-        log "    ✓ Set permissions on pyarmor_runtime.so"
-      fi
-      break
-    fi
-  done
-  
-  if [ -z "$pyarmor_runtime" ]; then
-    log "    ⚠ WARNING: No pyarmor_runtime_* folder found in $DIST_DIR"
+  log "    Syncing all files from $DIST_DIR into $TARGET_DIR (preserving user data)..."
+  if ! command -v rsync >/dev/null 2>&1; then
+    apt_update
+    apt_install rsync
   fi
-  
-  # Copy providers directory if it exists
-  if [ -d "$SRC_DIR/providers" ]; then
-    rm -rf "$TARGET_DIR/providers"
-    cp -a "$SRC_DIR/providers" "$TARGET_DIR/"
-    log "    ✓ Copied directory: providers"
-  fi
+
+  # Copy EVERYTHING from the extracted dist folder into the install directory.
+  # Exclusions prevent clobbering user data and venv.
+  rsync -a --delete \
+    --exclude=".venv/" \
+    --exclude="__pycache__/" \
+    --exclude=".install_arch" \
+    --exclude="config.json" \
+    --exclude="devices.json" \
+    --exclude="groups.json" \
+    "$SRC_DIR/" "$TARGET_DIR/"
+  log "    ✓ Sync complete"
   
   # Clean up temp download directory
   rm -rf "$TEMP_DIR" "$ZIP_PATH"
