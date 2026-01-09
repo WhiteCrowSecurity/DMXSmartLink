@@ -35,7 +35,7 @@ Best Tutorials for the product:  https://www.youtube.com/@WhiteCrowSecurity
 
 11. Click **"OPEN DASHBOARD"**, then navigate to **"Plugins"** on the top-left navigation bar.
 
-12. Click **"UPDATE"** for the available update for **Homebridge UI**, then click **"CLOSE"**.
+12. DO NOT Click **"UPDATE"** for the available GOVEE plugin!!!!.
 
 13. Click the **Restart** button on the top-right corner.
 
