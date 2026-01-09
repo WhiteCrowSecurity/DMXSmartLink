@@ -194,7 +194,7 @@ sudo ./setup.sh
 ## Support
 
 Email: **support@whitecrowsecurity.com**  
-Discord support available via the dashboard
+Discord support available via the dashboard or https://discord.gg/pj6f54dpv7
 
 ---
 
