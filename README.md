@@ -26,7 +26,7 @@ Best Tutorials for the product:  https://www.youtube.com/@WhiteCrowSecurity
 7. Run the setup script:
    - `sudo ./setup.sh`
 
-8. After the automated reboot, browse to:
+8. After install completes, browse to:
    - `https://<YOUR_IP_ADDRESS>:5000`
 
 9. Click the **"Homebridge UI"** link and then click **"GET STARTED"**.
