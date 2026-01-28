@@ -1,14 +1,24 @@
 # DMX Smart Link – Installation Instructions
 
 Best tutorials for the product:  
-https://www.youtube.com/@WhiteCrowSecurity
+`https://www.youtube.com/@WhiteCrowSecurity`
+
+---
+
+## What DMX Smart Link is
+
+DMX Smart Link is a hub that bridges **DMX software** (Art-Net / DMX universes) with **SmartLights** via Homebridge, so you can control SmartLights from your DMX controller/software.
+
+It also includes:
+- **AI Light Show (Audio Reactive)** (new): an audio-reactive show mode inside the dashboard.
+- **Visual Control**: manual DMX/fixture/group controls for testing and setup.
 
 ---
 
 ## System Requirements
 
-- Ubuntu Server (recommended)
-- Raspberry Pi 5 or Virtual Machine
+- Raspberry Pi 5 (recommended)
+- Ubuntu Server or Virtual Machine
 - Minimum **2 CPUs** and **4 GB RAM**
 - Internet access during installation
 
@@ -23,7 +33,7 @@ Password: dmx
 ## Installation Steps
 
 ### 1. Install Ubuntu Server
-Install a basic Ubuntu Server on supported hardware (Raspberry Pi 5 or VM).
+Install a basic Ubuntu Server on supported hardware or VM or install the Raspberry Pi 5 64bit os via their launcher from https://www.raspberrypi.com/software/.
 
 ---
 
@@ -32,38 +42,34 @@ You will need the system IP address later.
 
 You can get it by:
 - Installing the iOS app:  
-  https://apps.apple.com/us/app/dmxsmartlink-hub/id6753700995
+  `https://apps.apple.com/us/app/dmxsmartlink-hub/id6753700995`
 - Or running one of the following commands:
 ```
 ip a
 ```
 or
 ```
-ip config
+ifconfig
 ```
 
 ---
 
-### 3. Copy Installation Files
-Copy all files from `dmxsmartlink.zip` into:
-```
-/home/$USER
-```
+### 3. Run the Setup Script
+You only need `setup.sh` in the home directory of the `dmx` user.  
+The installer will **download/sync everything it needs from the GitHub repo** automatically (no manual file copying required).
 
----
-
-### 4. Run the Setup Script
 Open a terminal and run:
 
 ```
 sudo su
+cd /home/dmx
 chmod +x setup.sh
-sudo ./setup.sh
+./setup.sh
 ```
 
 ---
 
-### 5. Access the Web Interface
+### 4. Access the Web Interface
 After installation completes, open a browser and go to:
 ```
 https://<YOUR_IP_ADDRESS>:5000
@@ -81,9 +87,9 @@ https://<YOUR_IP_ADDRESS>:5000
 
 ---
 
-### 7. Install Alexa Plugin
+### 7. Install Govee and Alexa Plugin or other vendors light plugins
 1. Navigate to **Plugins**
-2. **DO NOT** update the existing Govee plugin
+2. **DO NOT** update the existing Govee plugin (We recommend this Plugin over Alexa for your Govee lights)
 3. Restart Homebridge
 4. Click the **power plug icon**
 5. Search for **Alexa**
@@ -102,6 +108,9 @@ https://<YOUR_IP_ADDRESS>:5000
 ---
 
 ### 9. Authenticate Amazon Account
+
+First login to your amazon.com account then,
+
 Open:
 ```
 http://<YOUR_IP_ADDRESS>:9000
@@ -110,7 +119,7 @@ http://<YOUR_IP_ADDRESS>:9000
 Log in using:
 - Amazon email
 - Password
-- OTP from phone
+- OTP from phone or other method
 
 When you see:
 ```
@@ -170,6 +179,54 @@ Valid: Expires on ...
 
 ---
 
+## AI Light Show (Audio Reactive) – Quick Use
+
+The AI Light Show runs inside the dashboard and can drive fixtures/groups based on audio input.
+
+1. Open **AI Light Show (Audio Reactive)**
+2. Select **Input Source (capture)**:
+   - Line-In via USB sound card (tested: **CULILUX CB5**)
+   - Or a system monitor source when analyzing playback on the device
+3. Select **Output Device (speakers)** and click **Apply Settings**
+4. Click **AI Show Start**
+
+### Using the Media Player (Audio/Video files)
+Inside the **AI Light Show** tab there is a **Media Player** section you can use to play local files and run the light show at the same time.
+
+- **Audio files (MP3/WAV/etc)**:
+  - Upload a file, select it, click **Play**
+  - Audio plays in the browser using the built-in player controls
+- **Video files (MP4/etc)**:
+  - Upload a file, select it, click **Play**
+  - Video plays in the browser (with controls)
+  - Click **Fullscreen** for an in-page fullscreen experience
+
+### Fullscreen & iPhone / AirPlay
+- On **iPhone/iOS**, fullscreen uses an **in-page fullscreen overlay** to avoid the common AirPlay takeover behavior.
+- If you want to AirPlay on purpose, use your device’s AirPlay controls; the UI fullscreen is designed to stay local.
+
+### YouTube link playback + light show
+You can paste a YouTube link in **External Video URL (YouTube/etc)** and click **Open** to watch it in the UI.
+
+To sync the light show to a YouTube link:
+- Use the **YouTube sync** feature (server-side audio extraction).
+- **Prerequisite**: `yt-dlp` must be installed on the hub (setup.sh does this for you):
+  - `sudo apt update && sudo apt install -y yt-dlp`
+
+Important note on sync:
+- The embedded YouTube player and server-synced audio may not start at the exact same “0:00” due to ads/buffering/cross-origin limitations.
+- For perfect 1:1 sync between audio and video, use uploaded local media files (single source of truth).
+
+---
+
+## Visual Control – Quick Use
+
+Use **Visual Control** for manual testing and setup:
+- Verify your DMX universes and patching
+- Test groups/fixtures output without audio analysis
+
+---
+
 ## Updating DMX Smart Link
 
 ### Option A: Built-in Update
@@ -194,8 +251,11 @@ sudo ./setup.sh
 ## Support
 
 Email: **support@whitecrowsecurity.com**  
-Discord support available via the dashboard or https://discord.gg/pj6f54dpv7
+Discord support available via the dashboard or `https://discord.gg/pj6f54dpv7`
 
 ---
+
+## Legal / implementation note
+The audio-reactive feature uses **standard audio analysis techniques** plus project-specific show-control logic.
 
 © White Crow Security / DMXSmartLink
