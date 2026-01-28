@@ -342,7 +342,17 @@ ensure_base_tooling() {
   log "STEP 4: Installing base tooling (venv + basics)..."
   apt_update
   apt_install python3 python3-venv python3-pip curl ca-certificates build-essential wget openssl git unzip \
-              avahi-daemon libnss-mdns dbus
+              avahi-daemon libnss-mdns dbus \
+              python3-dev portaudio19-dev pipewire pipewire-pulse wireplumber pulseaudio-utils \
+              bluez libspa-0.2-bluetooth rfkill \
+              ffmpeg yt-dlp
+
+  # Optional: PipeWire CLI tools package name differs by distro.
+  if command -v apt-cache >/dev/null 2>&1 && apt-cache show pipewire-tools >/dev/null 2>&1; then
+    apt_install pipewire-tools || true
+  else
+    apt_install pipewire-bin || true
+  fi
   systemctl enable avahi-daemon || true
   systemctl restart avahi-daemon || true
   echo
@@ -355,7 +365,7 @@ install_ble_support_host() {
   # These follow the Homebridge Bluetooth wiki recommendations.
   # pi-bluetooth will simply be ignored on non-Raspberry Pi distros.
   apt_update
-  apt_install bluetooth bluez libbluetooth-dev libudev-dev || true
+  apt_install bluetooth bluez libbluetooth-dev libudev-dev expect || true
   apt_install pi-bluetooth || true
 
   systemctl enable bluetooth || true
@@ -401,7 +411,9 @@ create_venv_and_install() {
     '$PYTHON_BIN' -m venv .venv
     source .venv/bin/activate
     pip install -U pip
-    pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial psutil
+    pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial psutil numpy sounddevice
+    # aubio is optional; on newer Python versions it may not build from source
+    pip install -U aubio || true
   "
   echo
 }
@@ -472,6 +484,31 @@ start_homebridge() {
 
   log "    → Homebridge container started."
   log "    → Visit http://<your-pi-or-ubuntu-ip>:8581 to finish Homebridge setup."
+  echo
+}
+
+setup_audio_sudoers() {
+  log "------------------------------------------------------"
+  log "STEP 10: Configuring sudoers for audio controls..."
+  local SUDO_FILE="/etc/sudoers.d/dmx-audio"
+  cat > "$SUDO_FILE" <<'EOF'
+dmx ALL=(root) NOPASSWD: /usr/bin/bluetoothctl, /usr/bin/pactl
+EOF
+  chmod 440 "$SUDO_FILE"
+  visudo -cf "$SUDO_FILE" || true
+  echo
+}
+
+setup_update_sudoers() {
+  log "------------------------------------------------------"
+  log "STEP 10b: Configuring sudoers for updater prereqs..."
+  # Allows the web UI "Update Now" flow to install missing prerequisites and reboot non-interactively.
+  local SUDO_FILE="/etc/sudoers.d/dmx-updater"
+  cat > "$SUDO_FILE" <<'EOF'
+dmx ALL=(root) NOPASSWD: /usr/bin/apt-get, /usr/bin/apt, /usr/sbin/reboot, /sbin/reboot, /usr/bin/reboot
+EOF
+  chmod 440 "$SUDO_FILE"
+  visudo -cf "$SUDO_FILE" || true
   echo
 }
 
@@ -578,6 +615,8 @@ start_homebridge                # Starts with DBus exposed into container
 install_govee_plugin            # Installs plugin + BLE deps + setcap inside container
 write_service
 configure_passwordless_sudo     # Allow service user to restart service without password
+setup_audio_sudoers             # Allow bluetoothctl/pactl for UI
+setup_update_sudoers            # Allow apt-get/reboot for Update Now prereq installs
 
 log "✅ All steps complete."
 log "Service status (last 30 lines):"
