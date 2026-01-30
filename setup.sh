@@ -415,8 +415,13 @@ create_venv_and_install() {
     source .venv/bin/activate
     pip install -U pip
     pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial psutil numpy sounddevice
-    # aubio is optional; on newer Python versions it may not build from source
-    pip install -U aubio || true
+    # aubio is optional. It is known to fail building on Python 3.13+ due to upstream C/Numpy API changes.
+    PYVER=\$('\"$PYTHON_BIN\"' -c 'import sys; print(sys.version_info[0]*100 + sys.version_info[1])' 2>/dev/null || echo 0)
+    if [ \"\$PYVER\" -ge 313 ]; then
+      echo \"Skipping aubio install (optional; not compatible with Python 3.13+)\"
+    else
+      pip install -U aubio || true
+    fi
   "
   echo
 }
