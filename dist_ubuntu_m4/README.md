@@ -250,7 +250,7 @@ sudo ./setup.sh
 
 ## Support
 
-Email: **support@whitecrowsecurity.com**  
+Email: **support@dmxsmartlink.com**  
 Discord support available via the dashboard or `https://discord.gg/pj6f54dpv7`
 
 ---
