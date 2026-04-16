@@ -33,9 +33,8 @@ CONFIG_DIR="/home/$USER_NAME/homebridge-config"
 # ---------------- Python 3.x ----------------
 PYTHON_BIN=""
 
-# ---------------- Custom Govee plugin repo ----------------
-# You can swap this to @homebridge-plugins/homebridge-govee if you want the official one
-GOVEE_REPO="github:cybermancerr/homebridge-govee#latest"
+# ---------------- Official Govee plugin repo ----------------
+GOVEE_REPO="github:homebridge-plugins/homebridge-govee#latest"
 
 log() { echo -e "$*"; }
 
