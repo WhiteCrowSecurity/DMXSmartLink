@@ -8,7 +8,7 @@
 - The Homebridge plugin refresh path now prefers Homebridge's supported `hb-service add @homebridge-plugins/homebridge-govee@latest` flow, with an `npm` fallback only for older/non-standard containers.
 - The Homebridge plugin refresh path now treats a failed install as a real update failure instead of silently continuing.
 - Homebridge image refresh now normalizes `homebridge/homebridge` tags back to latest so old pinned tags do not block updates.
-- The live updater now launches a separate helper process so release files are updated outside the running web service instead of overwriting the service from inside itself.
+- The live updater now launches a separate user-level helper service, stops `dmxsmartlink.service` before copying obfuscated release files into place, and restarts only if the reboot path does not complete.
 
 ### Scenes
 
