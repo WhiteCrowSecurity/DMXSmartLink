@@ -1,5 +1,5 @@
 #!/bin/bash
-# upgrade_pi5.sh — DMXSmartLink upgrade script for Raspberry Pi 5
+# upgrade_pi5.sh â€” DMXSmartLink upgrade script for Raspberry Pi 5
 # Run from: /home/dmx/ (or dmx user's home directory)
 # Usage: sudo bash upgrade_pi5.sh
 # - Updates code files from latest GitHub release
@@ -90,18 +90,18 @@ log() { echo -e "$*"; }
 # Check if installation exists
 check_installation() {
   if [[ ! -d "$TARGET_DIR" ]]; then
-    log "❌ DMXSmartLink installation not found at $TARGET_DIR"
+    log "âŒ DMXSmartLink installation not found at $TARGET_DIR"
     log "    Please run setup.sh first to install DMXSmartLink."
     exit 1
   fi
   
   if [[ ! -f "$TARGET_DIR/main.py" ]]; then
-    log "❌ DMXSmartLink installation appears incomplete (main.py not found)"
+    log "âŒ DMXSmartLink installation appears incomplete (main.py not found)"
     log "    Please run setup.sh to reinstall."
     exit 1
   fi
   
-  log "✓ Found existing installation at $TARGET_DIR"
+  log "âœ“ Found existing installation at $TARGET_DIR"
 }
 
 # Download and extract latest release
@@ -162,13 +162,13 @@ PY
   
   log "    Downloading release..."
   if ! curl -fL "$DOWNLOAD_URL" -o "$ZIP_PATH" 2>/dev/null; then
-    log "❌ Failed to download release zip"
+    log "âŒ Failed to download release zip"
     rm -rf "$TEMP_DIR" "$ZIP_PATH"
     exit 1
   fi
   
   if ! unzip -q "$ZIP_PATH" -d "$TEMP_DIR" 2>/dev/null; then
-    log "❌ Failed to extract zip file"
+    log "âŒ Failed to extract zip file"
     rm -rf "$TEMP_DIR" "$ZIP_PATH"
     exit 1
   fi
@@ -185,7 +185,7 @@ PY
     SRC_DIR="$TEMP_DIR/$DIST_DIR"
     log "    Using extracted release folder (direct): $SRC_DIR"
   else
-    log "❌ Directory $DIST_DIR not found in extracted zip"
+    log "âŒ Directory $DIST_DIR not found in extracted zip"
     log "    Available directories in temp: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ' || echo 'none')"
     if [[ -n "$ROOT_DIR" ]]; then
       log "    Root dir contents: $(ls -1 "$ROOT_DIR" 2>/dev/null | head -10 | tr '\n' ' ' || echo 'none')"
@@ -196,7 +196,7 @@ PY
   
   # Verify SRC_DIR exists and log contents for debugging
   if [[ ! -d "$SRC_DIR" ]]; then
-    log "❌ Source directory $SRC_DIR does not exist"
+    log "âŒ Source directory $SRC_DIR does not exist"
     rm -rf "$TEMP_DIR" "$ZIP_PATH"
     exit 1
   fi
@@ -211,83 +211,20 @@ PY
 upgrade_files() {
   local SRC_DIR="$1"
   
-  log "    Copying files from $DIST_DIR into $TARGET_DIR..."
-  
-  # Same file list as setup.sh (including config_loader.py and license_status.txt for reference)
-  local items=(
-    artnet_controller.py config_loader.py device_inventory.py device_registry.py group_init.py group_manager.py main.py
-    dmx_usb_controller.py visual_control_worker.py
-    license_status.txt HOMEBRIDGE_LICENSE.txt LICENSE.txt README.txt
-  )
-  
-  # Backup preserved files before copying
-  local BACKUP_DIR="$TARGET_DIR/.upgrade_backup_$$"
-  mkdir -p "$BACKUP_DIR"
-  for preserve_file in "${PRESERVE_FILES[@]}"; do
-    if [[ -e "$TARGET_DIR/$preserve_file" ]]; then
-      cp -a "$TARGET_DIR/$preserve_file" "$BACKUP_DIR/"
-    fi
-  done
-  
-  # Copy standard files (same logic as setup.sh, but skip preserved ones)
-  for it in "${items[@]}"; do
-    # Skip files that should be preserved
-    if [[ " ${PRESERVE_FILES[@]} " =~ " ${it} " ]]; then
-      continue
-    fi
-    
-    # Use same logic as setup.sh: [ -e ] instead of [[ -e ]]
-    if [ -e "$SRC_DIR/$it" ]; then
-      if [ -d "$SRC_DIR/$it" ]; then
-        rm -rf "$TARGET_DIR/$it"
-        cp -a "$SRC_DIR/$it" "$TARGET_DIR/"
-        log "    ✓ Updated directory: $it"
-      else
-        cp -a "$SRC_DIR/$it" "$TARGET_DIR/"
-        log "    ✓ Updated file: $it"
-      fi
-    else
-      log "    ⚠ $it not found in $DIST_DIR, skipping."
-    fi
-  done
-  
-  # Dynamically find and copy PyArmor Pro runtime folder (same logic as setup.sh)
-  log "    Finding PyArmor Pro runtime folder..."
-  local pyarmor_runtime=""
-  for dir in "$SRC_DIR"/pyarmor_runtime_*; do
-    if [ -d "$dir" ]; then
-      pyarmor_runtime="$(basename "$dir")"
-      rm -rf "$TARGET_DIR/$pyarmor_runtime"
-      cp -a "$dir" "$TARGET_DIR/"
-      log "    ✓ Copied PyArmor Pro runtime: $pyarmor_runtime"
-      
-      # Ensure .so file has correct permissions (executable and readable)
-      if [ -f "$TARGET_DIR/$pyarmor_runtime/pyarmor_runtime.so" ]; then
-        chmod 755 "$TARGET_DIR/$pyarmor_runtime/pyarmor_runtime.so"
-        log "    ✓ Set permissions on pyarmor_runtime.so"
-      fi
-      break
-    fi
-  done
-  
-  if [ -z "$pyarmor_runtime" ]; then
-    log "    ⚠ WARNING: No pyarmor_runtime_* folder found in $DIST_DIR"
+  log "    Syncing all release files from $DIST_DIR into $TARGET_DIR..."
+  if ! command -v rsync >/dev/null 2>&1; then
+    apt_update
+    apt_install rsync
   fi
-  
-  # Copy providers directory if it exists (same logic as setup.sh)
-  if [ -d "$SRC_DIR/providers" ]; then
-    rm -rf "$TARGET_DIR/providers"
-    cp -a "$SRC_DIR/providers" "$TARGET_DIR/"
-    log "    ✓ Copied directory: providers"
-  fi
-  
-  # Restore preserved files and directories
-  for preserve_file in "${PRESERVE_FILES[@]}"; do
-    if [[ -e "$BACKUP_DIR/$preserve_file" ]]; then
-      cp -a "$BACKUP_DIR/$preserve_file" "$TARGET_DIR/"
-    fi
-  done
-  rm -rf "$BACKUP_DIR"
+
+  # Copy the full release payload, but never touch the existing venv or
+  # generated caches. User/project data not present in the release is left
+  # alone because we intentionally do not use --delete here.
+  rsync -a \
+    --exclude=".venv/" \
+    --exclude="__pycache__/" \
+    --exclude=".install_arch" \
+    "$SRC_DIR/" "$TARGET_DIR/"
   
   # Save architecture marker for future upgrades
   echo "$DIST_DIR" > "$TARGET_DIR/.install_arch"
@@ -299,18 +236,17 @@ upgrade_files() {
   find "$TARGET_DIR" -type f -exec chmod 664 {} \;
   find "$TARGET_DIR" -name "*.so" -exec chmod 755 {} \;
   
-  log "    ✓ Files updated successfully"
+  log "    âœ“ Files updated successfully"
 }
-
 # Update Python dependencies
 update_python_deps() {
   log "------------------------------------------------------"
   log "STEP 2: Updating Python dependencies..."
   
   if [[ ! -d "$TARGET_DIR/.venv" ]]; then
-    log "    ⚠ Virtual environment not found, creating new one..."
+    log "    âš  Virtual environment not found, creating new one..."
     if ! command -v python3 >/dev/null 2>&1; then
-      log "❌ Python 3 not found"
+      log "âŒ Python 3 not found"
       exit 2
     fi
     sudo -u "$USER_NAME" bash -lc "
@@ -326,15 +262,15 @@ update_python_deps() {
     if [[ -f "$TARGET_DIR/.venv/bin/python" ]]; then
       "$TARGET_DIR/.venv/bin/python" -m pip install -U pip setuptools wheel >/dev/null 2>&1 || true
       "$TARGET_DIR/.venv/bin/pip" install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial >/dev/null 2>&1 || true
-      log "    ✓ Dependencies updated"
+      log "    âœ“ Dependencies updated"
     else
-      log "    ⚠ Virtual environment python not found at $TARGET_DIR/.venv/bin/python"
+      log "    âš  Virtual environment python not found at $TARGET_DIR/.venv/bin/python"
     fi
   fi
   
   chmod -R +x "$TARGET_DIR/.venv/bin" 2>/dev/null || true
   chown -R "$USER_NAME:$USER_NAME" "$TARGET_DIR/.venv" 2>/dev/null || true
-  log "    ✓ Python dependencies updated"
+  log "    âœ“ Python dependencies updated"
   echo
 }
 
@@ -344,7 +280,7 @@ update_homebridge() {
   log "STEP 3: Updating Homebridge container and Govee plugin..."
   
   if ! command -v docker >/dev/null 2>&1; then
-    log "    ⚠ Docker not found, skipping Homebridge update"
+    log "    âš  Docker not found, skipping Homebridge update"
     return
   fi
   
@@ -356,7 +292,7 @@ update_homebridge() {
   container_name="$(docker ps -a --format '{{.Names}}' | grep -i homebridge | head -n1 || true)"
   
   if [[ -z "$container_name" ]]; then
-    log "    ⚠ Homebridge container not found, skipping update"
+    log "    âš  Homebridge container not found, skipping update"
     return
   fi
   
@@ -427,7 +363,7 @@ except:
     "${env_vars[@]}" \
     "$image" >/dev/null 2>&1; then
     # If recreation failed, try with debug output
-    log "    ⚠ Failed to recreate Homebridge container, trying with basic config..."
+    log "    âš  Failed to recreate Homebridge container, trying with basic config..."
     # Fallback: try recreating with just the config directory (most important mount)
     if [[ -d "$CONFIG_DIR" ]]; then
       if docker run -d \
@@ -436,17 +372,17 @@ except:
         --network="$network_mode" \
         -v "$CONFIG_DIR:/homebridge" \
         "$image" >/dev/null 2>&1; then
-        log "    ✓ Homebridge container recreated with basic config"
+        log "    âœ“ Homebridge container recreated with basic config"
       else
-        log "    ❌ Failed to recreate container even with basic config"
+        log "    âŒ Failed to recreate container even with basic config"
         return
       fi
     else
-      log "    ❌ Config directory $CONFIG_DIR not found"
+      log "    âŒ Config directory $CONFIG_DIR not found"
       return
     fi
   else
-    log "    ✓ Homebridge container recreated"
+    log "    âœ“ Homebridge container recreated"
   fi
   
   # Install Govee plugin (only if container exists)
@@ -460,9 +396,9 @@ except:
     docker exec -u root "$container_name" bash -lc 'setcap cap_net_raw+eip "$(eval readlink -f "$(which node)")" || true' >/dev/null 2>&1 || true
     
     docker restart "$container_name" >/dev/null 2>&1
-    log "    ✓ Govee plugin installed/updated"
+    log "    âœ“ Govee plugin installed/updated"
   else
-    log "    ⚠ Container not running, skipping Govee plugin installation"
+    log "    âš  Container not running, skipping Govee plugin installation"
   fi
   
   echo
@@ -475,12 +411,12 @@ restart_service() {
   
   if systemctl is-active --quiet dmxsmartlink.service 2>/dev/null; then
     systemctl restart dmxsmartlink.service
-    log "    ✓ Service restarted"
+    log "    âœ“ Service restarted"
   elif systemctl is-enabled --quiet dmxsmartlink.service 2>/dev/null; then
     systemctl start dmxsmartlink.service
-    log "    ✓ Service started"
+    log "    âœ“ Service started"
   else
-    log "    ⚠ Service not found or not enabled"
+    log "    âš  Service not found or not enabled"
     log "    You may need to restart the service manually:"
     log "    sudo systemctl restart dmxsmartlink.service"
   fi
@@ -517,13 +453,13 @@ update_homebridge
 restart_service
 
 log "======================================================"
-log "✅ Upgrade complete!"
+log "âœ… Upgrade complete!"
 log "======================================================"
 log ""
 log "Configuration files have been preserved:"
 for preserve_file in "${PRESERVE_FILES[@]}"; do
   if [[ -f "$TARGET_DIR/$preserve_file" ]]; then
-    log "  ✓ $preserve_file"
+    log "  âœ“ $preserve_file"
   fi
 done
 log ""
