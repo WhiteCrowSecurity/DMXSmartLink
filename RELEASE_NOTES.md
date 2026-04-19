@@ -5,6 +5,7 @@
 ### Update System
 
 - `Update Now` now syncs the correct `dist_*` files, refreshes the Homebridge Docker container to the latest `homebridge/homebridge` image, updates the latest official Govee plugin, and then reboots.
+- The released updater now resolves the extracted `dist_*` folder cleanly before syncing, so the full obfuscated payload copies into place instead of failing mid-update.
 - The Homebridge plugin refresh path now prefers Homebridge's supported `hb-service add @homebridge-plugins/homebridge-govee@latest` flow, with an `npm` fallback only for older/non-standard containers.
 - The Homebridge plugin refresh path now treats a failed install as a real update failure instead of silently continuing.
 - Homebridge image refresh now normalizes `homebridge/homebridge` tags back to latest so old pinned tags do not block updates.
