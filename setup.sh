@@ -34,6 +34,7 @@ CONFIG_DIR="/home/$USER_NAME/homebridge-config"
 PYTHON_BIN=""
 
 # ---------------- Official Govee plugin repo ----------------
+GOVEE_PLUGIN="@homebridge-plugins/homebridge-govee@latest"
 GOVEE_REPO="github:homebridge-plugins/homebridge-govee#latest"
 
 log() { echo -e "$*"; }
@@ -527,13 +528,13 @@ install_govee_plugin() {
   docker exec -u root -e DEBIAN_FRONTEND=noninteractive -e NEEDRESTART_MODE=a homebridge \
     bash -lc "apt-get update -yq && apt-get install -yq --no-install-recommends git curl bluetooth bluez libbluetooth-dev libudev-dev pi-bluetooth || true"
 
-  # Install the plugin itself
-  docker exec homebridge bash -lc "cd /homebridge && npm install --save --force '$GOVEE_REPO'"
+  # Install the plugin itself using the supported Homebridge service helper first.
+  docker exec homebridge sh -lc "if command -v hb-service >/dev/null 2>&1; then hb-service --docker add '$GOVEE_PLUGIN'; elif command -v npm >/dev/null 2>&1; then cd /homebridge && npm install --save --force '$GOVEE_REPO'; else echo 'Neither hb-service nor npm is available in the Homebridge container.' >&2; exit 127; fi"
 
   # Give node cap_net_raw so noble can open HCI sockets if needed
   docker exec -u root homebridge bash -lc 'setcap cap_net_raw+eip "$(eval readlink -f "$(which node)")" || true'
 
-  docker exec homebridge bash -lc "cd /homebridge && npm ls --depth=0 || true"
+  docker exec homebridge sh -lc "test -f /homebridge/node_modules/@homebridge-plugins/homebridge-govee/package.json"
   docker restart homebridge >/dev/null
   log "    → Latest official Govee plugin installed, BLE deps present, and Homebridge restarted."
   echo
