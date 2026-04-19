@@ -85,7 +85,7 @@ PRESERVE_FILES=(
   "LICENSE.txt"
 )
 
-log() { echo -e "$*"; }
+log() { echo -e "$*" >&2; }
 
 # Check if installation exists
 check_installation() {
@@ -157,7 +157,7 @@ PY
   
   # Fallback to direct download
   if [[ -z "$DOWNLOAD_URL" ]] || [[ "$DOWNLOAD_URL" == "" ]]; then
-    DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/DMXSmartLink/dmxsmartlink.zip"
+    DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/dmxsmartlink.zip"
   fi
   
   log "    Downloading release..."
