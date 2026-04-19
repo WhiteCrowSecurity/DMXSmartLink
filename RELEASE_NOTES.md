@@ -16,6 +16,9 @@
 - Scene saves now capture the full live group and fixture target state instead of only the currently selected targets.
 - Scene recalls now keep RGB and CT intent separate so CT scenes do not carry stale RGB tinting forward.
 - Scene timing was refined so off-target groups can complete their final off transition more reliably after scene changes.
+- The Pi5 build now applies Visual Control scenes in place, so users can trigger another scene immediately without manually refreshing the page.
+- The Pi5 build now syncs shared selection and UI state between multiple browser sessions, so concurrent operators see scene/brightness changes settle onto the same live state.
+- The Pi5 build also corrects the Visual Control power button icon rendering after the scene-sync changes.
 
 ### Homebridge / Govee
 
