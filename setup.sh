@@ -528,14 +528,14 @@ install_govee_plugin() {
     bash -lc "apt-get update -yq && apt-get install -yq --no-install-recommends git curl bluetooth bluez libbluetooth-dev libudev-dev pi-bluetooth || true"
 
   # Install the plugin itself
-  docker exec homebridge bash -lc "cd /homebridge && npm install '$GOVEE_REPO' || true"
+  docker exec homebridge bash -lc "cd /homebridge && npm install --save --force '$GOVEE_REPO'"
 
   # Give node cap_net_raw so noble can open HCI sockets if needed
   docker exec -u root homebridge bash -lc 'setcap cap_net_raw+eip "$(eval readlink -f "$(which node)")" || true'
 
   docker exec homebridge bash -lc "cd /homebridge && npm ls --depth=0 || true"
   docker restart homebridge >/dev/null
-  log "    → Govee plugin installed, BLE deps present, and Homebridge restarted."
+  log "    → Latest official Govee plugin installed, BLE deps present, and Homebridge restarted."
   echo
 }
 

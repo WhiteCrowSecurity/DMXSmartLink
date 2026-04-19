@@ -33,9 +33,8 @@ CONFIG_DIR="/home/$USER_NAME/homebridge-config"
 # ---------------- Python 3.x ----------------
 PYTHON_BIN=""
 
-# ---------------- Custom Govee plugin repo ----------------
-# You can swap this to @homebridge-plugins/homebridge-govee if you want the official one
-GOVEE_REPO="github:cybermancerr/homebridge-govee#latest"
+# ---------------- Official Govee plugin repo ----------------
+GOVEE_REPO="github:homebridge-plugins/homebridge-govee#latest"
 
 log() { echo -e "$*"; }
 
@@ -290,13 +289,13 @@ PY
 
   # Copy EVERYTHING from the extracted dist folder into the install directory.
   # Exclusions prevent clobbering user data and venv.
-  rsync -a --delete \
-    --exclude=".venv/" \
-    --exclude="__pycache__/" \
-    --exclude=".install_arch" \
-    --exclude="config.json" \
-    --exclude="devices.json" \
-    --exclude="groups.json" \
+  rsync -a --delete --delete-delay --force \
+    --exclude="/.venv/" \
+    --exclude="/__pycache__/" \
+    --exclude="/.install_arch" \
+    --exclude="/config.json" \
+    --exclude="/devices.json" \
+    --exclude="/groups.json" \
     "$SRC_DIR/" "$TARGET_DIR/"
   log "    ✓ Sync complete"
 
@@ -315,7 +314,10 @@ PY
 install_docker() {
   log "------------------------------------------------------"
   log "STEP 3: Installing Docker (apt, then fallback to get.docker.com if needed)..."
-  apt_update || true
+  if command -v docker >/dev/null 2>&1; then
+    log "    Docker already installed: $(docker --version)"
+  else
+    apt_update || true
   if ! apt_install docker.io; then
     log "    apt install docker.io failed or unavailable; trying Docker convenience script…"
   fi
@@ -323,6 +325,7 @@ install_docker() {
   if ! command -v docker >/dev/null 2>&1; then
     curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
     sh /tmp/get-docker.sh
+  fi
   fi
 
   systemctl enable docker
@@ -404,6 +407,8 @@ ensure_python() {
 }
 
 create_venv_and_install() {
+  local pyver
+  pyver="$("$PYTHON_BIN" -c 'import sys; print(sys.version_info[0]*100 + sys.version_info[1])' 2>/dev/null || echo 0)"
   log "------------------------------------------------------"
   log "STEP 6: Creating venv on Python 3.x and installing deps…"
   log "    Using interpreter: $("$PYTHON_BIN" -V)"
@@ -416,9 +421,8 @@ create_venv_and_install() {
     pip install -U pip
     pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial psutil numpy sounddevice
     # aubio is optional. It is known to fail building on Python 3.13+ due to upstream C/Numpy API changes.
-    PYVER=\$('\"$PYTHON_BIN\"' -c 'import sys; print(sys.version_info[0]*100 + sys.version_info[1])' 2>/dev/null || echo 0)
-    if [ \"\$PYVER\" -ge 313 ]; then
-      echo \"Skipping aubio install (optional; not compatible with Python 3.13+)\"
+    if [ '$pyver' -ge 313 ]; then
+      echo 'Skipping aubio install (optional; not compatible with Python 3.13+)'
     else
       pip install -U aubio || true
     fi
@@ -526,17 +530,17 @@ install_govee_plugin() {
 
   # Install build/runtime deps for noble stack inside the container
   docker exec -u root -e DEBIAN_FRONTEND=noninteractive -e NEEDRESTART_MODE=a homebridge \
-    bash -lc "apt-get update -yq && apt-get install -yq --no-install-recommends git curl bluetooth bluez libbluetooth-dev libudev-dev pi-bluetooth || true"
+    bash -lc "touch /etc/modules && apt-get update -yq && apt-get install -yq --no-install-recommends git curl bluetooth bluez libbluetooth-dev libudev-dev || true"
 
   # Install the plugin itself
-  docker exec homebridge bash -lc "cd /homebridge && npm install '$GOVEE_REPO' || true"
+  docker exec homebridge bash -lc "cd /homebridge && npm install --save --force '$GOVEE_REPO'"
 
   # Give node cap_net_raw so noble can open HCI sockets if needed
   docker exec -u root homebridge bash -lc 'setcap cap_net_raw+eip "$(eval readlink -f "$(which node)")" || true'
 
   docker exec homebridge bash -lc "cd /homebridge && npm ls --depth=0 || true"
   docker restart homebridge >/dev/null
-  log "    → Govee plugin installed, BLE deps present, and Homebridge restarted."
+  log "    → Latest official Govee plugin installed, BLE deps present, and Homebridge restarted."
   echo
 }
 
