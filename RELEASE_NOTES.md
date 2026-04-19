@@ -8,7 +8,7 @@
 - The Homebridge plugin refresh path now prefers Homebridge's supported `hb-service add @homebridge-plugins/homebridge-govee@latest` flow, with an `npm` fallback only for older/non-standard containers.
 - The Homebridge plugin refresh path now treats a failed install as a real update failure instead of silently continuing.
 - Homebridge image refresh now normalizes `homebridge/homebridge` tags back to latest so old pinned tags do not block updates.
-- The live updater no longer gets interrupted by Flask's file reloader while it is writing a new release over the running install.
+- The live updater now launches a separate helper process so release files are updated outside the running web service instead of overwriting the service from inside itself.
 
 ### Scenes
 
