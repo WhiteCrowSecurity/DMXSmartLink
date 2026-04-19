@@ -4,9 +4,11 @@
 
 ### Update System
 
-- `Update Now` now syncs the correct `dist_*` files, refreshes the Homebridge Docker container to the latest `homebridge/homebridge` image, updates the official `homebridge-plugins/homebridge-govee#latest` plugin, and then reboots.
-- The Homebridge plugin refresh path now treats a failed `npm install` as a real update failure instead of silently continuing.
+- `Update Now` now syncs the correct `dist_*` files, refreshes the Homebridge Docker container to the latest `homebridge/homebridge` image, updates the latest official Govee plugin, and then reboots.
+- The Homebridge plugin refresh path now prefers Homebridge's supported `hb-service add @homebridge-plugins/homebridge-govee@latest` flow, with an `npm` fallback only for older/non-standard containers.
+- The Homebridge plugin refresh path now treats a failed install as a real update failure instead of silently continuing.
 - Homebridge image refresh now normalizes `homebridge/homebridge` tags back to latest so old pinned tags do not block updates.
+- The live updater no longer gets interrupted by Flask's file reloader while it is writing a new release over the running install.
 
 ### Scenes
 
@@ -16,8 +18,8 @@
 
 ### Homebridge / Govee
 
-- DMXSmartLink is standardized on the official `homebridge-plugins/homebridge-govee` plugin path.
-- Public installer/setup scripts now force-refresh the official plugin during install/update instead of quietly leaving older plugin state in place.
+- DMXSmartLink is standardized on the official `@homebridge-plugins/homebridge-govee` plugin path.
+- Public installer/setup scripts now force-refresh the official plugin during install/update using the supported Homebridge helper when available.
 
 ### Packaging
 
