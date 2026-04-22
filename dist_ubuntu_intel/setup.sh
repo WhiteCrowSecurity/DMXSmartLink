@@ -536,7 +536,7 @@ setup_update_sudoers() {
   # Allows the web UI "Update Now" flow to install missing prerequisites and reboot non-interactively.
   local SUDO_FILE="/etc/sudoers.d/dmx-updater"
   cat > "$SUDO_FILE" <<EOF
-$USER_NAME ALL=(root) NOPASSWD: /usr/bin/apt-get, /usr/bin/apt, /usr/sbin/reboot, /sbin/reboot, /usr/bin/reboot, /usr/bin/systemd-run
+$USER_NAME ALL=(root) NOPASSWD: /usr/bin/apt-get, /usr/bin/apt, /usr/sbin/reboot, /sbin/reboot, /usr/bin/reboot
 EOF
   chmod 440 "$SUDO_FILE"
   visudo -cf "$SUDO_FILE" || true
