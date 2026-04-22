@@ -6,7 +6,7 @@
 
 - `Update Now` now launches a root-owned updater helper installed by `setup.sh` instead of starting a second obfuscated Python worker from the live app process.
 - Public `setup.sh` now installs `/usr/local/sbin/dmxsmartlink-update-launcher` and `/usr/local/sbin/dmxsmartlink-root-update`, and grants passwordless sudo only for the launcher path.
-- The root helper starts the real update job in a transient `systemd-run` unit, stops `dmxsmartlink.service` before replacing obfuscated files, refreshes Homebridge plus the official Govee plugin, and then starts the service again.
+- The root helper starts the real update job in a transient `systemd-run` unit, stops `dmxsmartlink.service` before replacing obfuscated files, refreshes Homebridge plus the official Govee plugin, and now reboots the system on a successful update. Service restart remains only as a fallback if reboot cannot be triggered.
 - The launcher and worker now carry the install user and target paths explicitly, which fixes fresh Pi5 installs where the updater previously inferred the wrong home directory under `systemd-run`.
 - This updater flow was validated on the fresh Pi5 at `192.168.1.159`, including a full `Update Now` run that stopped the service, synced the public release, refreshed Homebridge/plugin state, and returned the UI to `200 OK`.
 
@@ -14,6 +14,11 @@
 
 - The Pi5 public payload is refreshed from the validated `V19` obfuscated build.
 - Intel and M4 compiled application modules were not recompiled for this respin; only their release-facing `setup.sh` and `upgrade_pi5.sh` scripts were refreshed.
+
+### Reboot
+
+- `setup.sh` now restores a narrow passwordless sudo rule for the OS reboot command, so the dashboard `Reboot OS` button works again after install.
+- The Pi5 updater also self-heals that reboot sudoers file during a successful update, so the reboot button stays functional after moving onto this release.
 
 ## 2026.04.21
 
