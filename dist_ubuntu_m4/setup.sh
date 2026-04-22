@@ -29,6 +29,8 @@ HOME_DIR="$SCRIPT_DIR"
 TARGET_DIR="$HOME_DIR/dmxsmartlink"
 SERVICE_FILE="/etc/systemd/system/dmxsmartlink.service"
 CONFIG_DIR="/home/$USER_NAME/homebridge-config"
+ROOT_UPDATE_WORKER="/usr/local/sbin/dmxsmartlink-root-update"
+ROOT_UPDATE_LAUNCHER="/usr/local/sbin/dmxsmartlink-update-launcher"
 
 # ---------------- Python 3.x ----------------
 PYTHON_BIN=""
@@ -532,14 +534,59 @@ EOF
 
 setup_update_sudoers() {
   log "------------------------------------------------------"
-  log "STEP 10b: Configuring sudoers for updater prereqs..."
-  # Allows the web UI "Update Now" flow to install missing prerequisites and reboot non-interactively.
+  log "STEP 10b: Configuring sudoers for updater launcher..."
+  # Allows the web UI "Update Now" flow to invoke the root-owned update launcher.
   local SUDO_FILE="/etc/sudoers.d/dmx-updater"
   cat > "$SUDO_FILE" <<EOF
-$USER_NAME ALL=(root) NOPASSWD: /usr/bin/apt-get, /usr/bin/apt, /usr/sbin/reboot, /sbin/reboot, /usr/bin/reboot
+$USER_NAME ALL=(root) NOPASSWD: $ROOT_UPDATE_LAUNCHER
 EOF
   chmod 440 "$SUDO_FILE"
   visudo -cf "$SUDO_FILE" || true
+  echo
+}
+
+install_root_update_helpers() {
+  log "------------------------------------------------------"
+  log "STEP 10c: Installing root-owned update helpers..."
+
+  if [[ ! -f "$TARGET_DIR/upgrade_pi5.sh" ]]; then
+    log "    ⚠ upgrade_pi5.sh not found in $TARGET_DIR, skipping root updater helper install"
+    echo
+    return
+  fi
+
+  install -o root -g root -m 755 "$TARGET_DIR/upgrade_pi5.sh" "$ROOT_UPDATE_WORKER"
+
+  cat > "$ROOT_UPDATE_LAUNCHER" <<EOF
+#!/bin/bash
+set -Eeuo pipefail
+
+TARGET_DIR="/home/$USER_NAME/dmxsmartlink"
+WORKER="$ROOT_UPDATE_WORKER"
+LOG_PATH="\$TARGET_DIR/logs/update_worker.log"
+SYSTEMD_RUN_BIN="\$(command -v systemd-run || echo /usr/bin/systemd-run)"
+export DMXSMARTLINK_USER="$USER_NAME"
+export DMXSMARTLINK_HOME_DIR="/home/$USER_NAME"
+export DMXSMARTLINK_TARGET_DIR="\$TARGET_DIR"
+
+mkdir -p "\$TARGET_DIR/logs"
+touch "\$LOG_PATH"
+chown $USER_NAME:$USER_NAME "\$TARGET_DIR/logs" "\$LOG_PATH" 2>/dev/null || true
+
+STAMP="\$(date '+%Y-%m-%d %H:%M:%S')"
+printf '\n=== Update worker started %s ===\n' "\$STAMP" >> "\$LOG_PATH"
+
+exec "\$SYSTEMD_RUN_BIN" \
+  --unit "dmxsmartlink-update-\$(date +%s)" \
+  --collect \
+  --property "WorkingDirectory=\$TARGET_DIR" \
+  /bin/bash -lc 'export DMXSMARTLINK_USER="$USER_NAME"; export DMXSMARTLINK_HOME_DIR="/home/$USER_NAME"; export DMXSMARTLINK_TARGET_DIR="/home/$USER_NAME/dmxsmartlink"; cd "/home/$USER_NAME/dmxsmartlink" && exec /usr/local/sbin/dmxsmartlink-root-update >> "/home/$USER_NAME/dmxsmartlink/logs/update_worker.log" 2>&1'
+EOF
+
+  chmod 755 "$ROOT_UPDATE_LAUNCHER"
+  chown root:root "$ROOT_UPDATE_LAUNCHER"
+  log "    ✓ Root-owned update worker installed at $ROOT_UPDATE_WORKER"
+  log "    ✓ Root-owned update launcher installed at $ROOT_UPDATE_LAUNCHER"
   echo
 }
 
@@ -653,7 +700,8 @@ install_govee_plugin            # Installs plugin + BLE deps + setcap inside con
 write_service
 configure_passwordless_sudo     # Allow service user to restart service without password
 setup_audio_sudoers             # Allow bluetoothctl/pactl for UI
-setup_update_sudoers            # Allow apt-get/reboot for Update Now prereq installs
+install_root_update_helpers     # Install root-owned update launcher/worker
+setup_update_sudoers            # Allow Update Now launcher without broad sudo access
 
 log "âœ… All steps complete."
 log "Service status (last 30 lines):"
