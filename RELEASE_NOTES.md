@@ -1,5 +1,15 @@
 # DMXSmartLink Release Notes
 
+## 2026.04.22
+
+### Updater
+
+- `Update Now` now uses a non-destructive sudo permission check, so the preflight no longer bounces `dmxsmartlink.service` just to see whether `restart` is allowed.
+- The Pi5 updater now launches its internal worker as a detached child process, keeps the dashboard service alive while the new release files are synced in place, refreshes Homebridge, and then reboots to activate the update cleanly.
+- This updater flow is backwards-compatible with installs that only have the legacy passwordless `systemctl restart dmxsmartlink.service` grant plus the normal updater `apt-get` and `reboot` grant.
+- Public `setup.sh` was trimmed back to the updater commands that are still needed, so fresh installs no longer need an extra passwordless `systemd-run` allowance.
+- Public `VERSION` files were updated to `2026.04.22` so installed systems show the updater compatibility fix date in the UI.
+
 ## 2026.04.21
 
 ### Installer / Updater
