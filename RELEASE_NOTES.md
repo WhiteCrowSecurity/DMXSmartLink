@@ -6,7 +6,8 @@
 
 - `setup.sh` now survives GitHub API fallback cleanly by piping the release JSON into Python instead of accidentally treating JSON booleans like `false` as Python code.
 - `setup.sh` and `upgrade_pi5.sh` now allow warning-only `unzip` exits when the expected release files were still extracted, which fixes installs on Debian/Ubuntu where the previous public zip triggered a backslash path-separator warning.
-- The Pi5 build now launches the built-in update worker directly and checks only the specific passwordless sudo commands the updater actually needs, so `Update Now` no longer depends on a broad `sudo -n true` or `sudo bash` allowance.
+- The Pi5 build now launches the built-in update worker through a transient `systemd-run` unit and checks only the specific passwordless sudo commands the updater actually needs, so `Update Now` no longer depends on a broad `sudo -n true` or `sudo bash` allowance.
+- Public `setup.sh` now provisions passwordless sudo for `/usr/bin/systemd-run` alongside the updater's existing `apt-get` and `reboot` commands.
 - Public `VERSION` files were updated to `2026.04.21` so installed systems show the installer fix date in the UI.
 
 ### Packaging
