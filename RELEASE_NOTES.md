@@ -4,11 +4,16 @@
 
 ### Updater
 
-- `Update Now` now uses a non-destructive sudo permission check, so the preflight no longer bounces `dmxsmartlink.service` just to see whether `restart` is allowed.
-- The Pi5 updater now launches its internal worker as a detached child process, keeps the dashboard service alive while the new release files are synced in place, refreshes Homebridge, and then reboots to activate the update cleanly.
-- This updater flow is backwards-compatible with installs that only have the legacy passwordless `systemctl restart dmxsmartlink.service` grant plus the normal updater `apt-get` and `reboot` grant.
-- Public `setup.sh` was trimmed back to the updater commands that are still needed, so fresh installs no longer need an extra passwordless `systemd-run` allowance.
-- Public `VERSION` files were updated to `2026.04.22` so installed systems show the updater compatibility fix date in the UI.
+- `Update Now` now launches a root-owned updater helper installed by `setup.sh` instead of starting a second obfuscated Python worker from the live app process.
+- Public `setup.sh` now installs `/usr/local/sbin/dmxsmartlink-update-launcher` and `/usr/local/sbin/dmxsmartlink-root-update`, and grants passwordless sudo only for the launcher path.
+- The root helper starts the real update job in a transient `systemd-run` unit, stops `dmxsmartlink.service` before replacing obfuscated files, refreshes Homebridge plus the official Govee plugin, and then starts the service again.
+- The launcher and worker now carry the install user and target paths explicitly, which fixes fresh Pi5 installs where the updater previously inferred the wrong home directory under `systemd-run`.
+- This updater flow was validated on the fresh Pi5 at `192.168.1.159`, including a full `Update Now` run that stopped the service, synced the public release, refreshed Homebridge/plugin state, and returned the UI to `200 OK`.
+
+### Packaging
+
+- The Pi5 public payload is refreshed from the validated `V19` obfuscated build.
+- Intel and M4 compiled application modules were not recompiled for this respin; only their release-facing `setup.sh` and `upgrade_pi5.sh` scripts were refreshed.
 
 ## 2026.04.21
 

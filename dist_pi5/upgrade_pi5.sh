@@ -19,15 +19,24 @@ apt_update()  { apt-get update -yq; }
 apt_install() { apt-get install $APT_FLAGS --no-install-recommends "$@"; }
 
 # ---------------- Paths / Users ----------------
-# Detect user from current directory or HOME
-if [[ "$(pwd)" == /home/* ]]; then
+# Detect user/paths from explicit environment first, then fall back to cwd.
+if [[ -n "${DMXSMARTLINK_USER:-}" ]]; then
+  USER_NAME="$DMXSMARTLINK_USER"
+elif [[ "$(pwd)" == /home/*/dmxsmartlink* ]]; then
+  USER_NAME="$(basename "$(dirname "$(pwd)")")"
+elif [[ "$(pwd)" == /home/* ]]; then
   USER_NAME="$(basename "$(pwd)")"
 else
   USER_NAME="${SUDO_USER:-${USER:-dmx}}"
 fi
-HOME_DIR="/home/$USER_NAME"
-TARGET_DIR="$HOME_DIR/dmxsmartlink"
+HOME_DIR="${DMXSMARTLINK_HOME_DIR:-/home/$USER_NAME}"
+TARGET_DIR="${DMXSMARTLINK_TARGET_DIR:-$HOME_DIR/dmxsmartlink}"
 CONFIG_DIR="$HOME_DIR/homebridge-config"
+SYSTEMCTL_BIN="$(command -v systemctl || echo /bin/systemctl)"
+ROOT_UPDATE_WORKER="/usr/local/sbin/dmxsmartlink-root-update"
+ROOT_UPDATE_LAUNCHER="/usr/local/sbin/dmxsmartlink-update-launcher"
+SERVICE_STOPPED=0
+RESTART_DONE=0
 
 detect_dist_dir() {
   if [[ -f "$TARGET_DIR/.install_arch" ]]; then
@@ -112,6 +121,78 @@ extract_zip_allowing_warnings() {
   fi
   return 1
 }
+
+refresh_root_update_worker_from_release() {
+  local SRC_DIR="$1"
+  local worker_src="$SRC_DIR/upgrade_pi5.sh"
+
+  if [[ -f "$worker_src" ]]; then
+    install -o root -g root -m 755 "$worker_src" "$ROOT_UPDATE_WORKER" || true
+    log "    Refreshed root update worker at $ROOT_UPDATE_WORKER"
+  fi
+}
+
+refresh_root_update_launcher() {
+  cat > "$ROOT_UPDATE_LAUNCHER" <<EOF
+#!/bin/bash
+set -Eeuo pipefail
+
+TARGET_DIR="$TARGET_DIR"
+WORKER="$ROOT_UPDATE_WORKER"
+LOG_PATH="\$TARGET_DIR/logs/update_worker.log"
+SYSTEMD_RUN_BIN="\$(command -v systemd-run || echo /usr/bin/systemd-run)"
+export DMXSMARTLINK_USER="$USER_NAME"
+export DMXSMARTLINK_HOME_DIR="$HOME_DIR"
+export DMXSMARTLINK_TARGET_DIR="$TARGET_DIR"
+
+mkdir -p "\$TARGET_DIR/logs"
+touch "\$LOG_PATH"
+chown $USER_NAME:$USER_NAME "\$TARGET_DIR/logs" "\$LOG_PATH" 2>/dev/null || true
+
+STAMP="\$(date '+%Y-%m-%d %H:%M:%S')"
+printf '\n=== Update worker started %s ===\n' "\$STAMP" >> "\$LOG_PATH"
+
+exec "\$SYSTEMD_RUN_BIN" \
+  --unit "dmxsmartlink-update-\$(date +%s)" \
+  --collect \
+  --property "WorkingDirectory=\$TARGET_DIR" \
+  /bin/bash -lc 'export DMXSMARTLINK_USER="$USER_NAME"; export DMXSMARTLINK_HOME_DIR="$HOME_DIR"; export DMXSMARTLINK_TARGET_DIR="$TARGET_DIR"; cd "$TARGET_DIR" && exec /usr/local/sbin/dmxsmartlink-root-update >> "$TARGET_DIR/logs/update_worker.log" 2>&1'
+EOF
+
+  chmod 755 "$ROOT_UPDATE_LAUNCHER"
+  chown root:root "$ROOT_UPDATE_LAUNCHER"
+  log "    Refreshed root update launcher at $ROOT_UPDATE_LAUNCHER"
+}
+
+stop_service_for_upgrade() {
+  log "------------------------------------------------------"
+  log "STEP 1b: Stopping DMXSmartLink service before file sync..."
+
+  if "$SYSTEMCTL_BIN" is-active --quiet dmxsmartlink.service 2>/dev/null; then
+    "$SYSTEMCTL_BIN" stop dmxsmartlink.service
+    SERVICE_STOPPED=1
+    log "    Ã¢Å“â€œ dmxsmartlink.service stopped"
+  else
+    log "    Ã¢Å¡Â  dmxsmartlink.service was not active"
+  fi
+  echo
+}
+
+cleanup_on_exit() {
+  local rc=$?
+  if [[ $SERVICE_STOPPED -eq 1 && $RESTART_DONE -eq 0 ]]; then
+    log "    Ã¢Å¡Â  Upgrade exited early, attempting to bring dmxsmartlink.service back up..."
+    if "$SYSTEMCTL_BIN" start dmxsmartlink.service >/dev/null 2>&1; then
+      log "    Ã¢Å“â€œ dmxsmartlink.service restarted after interrupted upgrade"
+    else
+      log "    Ã¢ÂÅ’ Could not restart dmxsmartlink.service automatically after interrupted upgrade"
+    fi
+  fi
+  trap - EXIT
+  exit "$rc"
+}
+
+trap cleanup_on_exit EXIT
 
 # Check if installation exists
 check_installation() {
@@ -445,11 +526,13 @@ restart_service() {
   log "------------------------------------------------------"
   log "STEP 4: Restarting DMXSmartLink service..."
   
-  if systemctl is-active --quiet dmxsmartlink.service 2>/dev/null; then
-    systemctl restart dmxsmartlink.service
+  if "$SYSTEMCTL_BIN" is-active --quiet dmxsmartlink.service 2>/dev/null; then
+    "$SYSTEMCTL_BIN" restart dmxsmartlink.service
+    RESTART_DONE=1
     log "    âœ“ Service restarted"
-  elif systemctl is-enabled --quiet dmxsmartlink.service 2>/dev/null; then
-    systemctl start dmxsmartlink.service
+  elif "$SYSTEMCTL_BIN" is-enabled --quiet dmxsmartlink.service 2>/dev/null; then
+    "$SYSTEMCTL_BIN" start dmxsmartlink.service
+    RESTART_DONE=1
     log "    âœ“ Service started"
   else
     log "    âš  Service not found or not enabled"
@@ -472,6 +555,9 @@ log "STEP 1: Downloading latest release..."
 
 # Download and extract release
 SRC_DIR=$(download_release "$DIST_DIR")
+refresh_root_update_worker_from_release "$SRC_DIR"
+refresh_root_update_launcher
+stop_service_for_upgrade
 
 # Upgrade files
 upgrade_files "$SRC_DIR"
@@ -500,4 +586,4 @@ for preserve_file in "${PRESERVE_FILES[@]}"; do
 done
 log ""
 log "Service status:"
-systemctl --no-pager -n 5 status dmxsmartlink.service 2>/dev/null || log "  (Run 'sudo systemctl status dmxsmartlink.service' to check)"
+"$SYSTEMCTL_BIN" --no-pager -n 5 status dmxsmartlink.service 2>/dev/null || log "  (Run 'sudo systemctl status dmxsmartlink.service' to check)"
