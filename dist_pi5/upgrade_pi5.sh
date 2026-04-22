@@ -33,6 +33,7 @@ HOME_DIR="${DMXSMARTLINK_HOME_DIR:-/home/$USER_NAME}"
 TARGET_DIR="${DMXSMARTLINK_TARGET_DIR:-$HOME_DIR/dmxsmartlink}"
 CONFIG_DIR="$HOME_DIR/homebridge-config"
 SYSTEMCTL_BIN="$(command -v systemctl || echo /bin/systemctl)"
+REBOOT_BIN="$(command -v reboot || echo /usr/sbin/reboot)"
 ROOT_UPDATE_WORKER="/usr/local/sbin/dmxsmartlink-root-update"
 ROOT_UPDATE_LAUNCHER="/usr/local/sbin/dmxsmartlink-update-launcher"
 SERVICE_STOPPED=0
@@ -162,6 +163,23 @@ EOF
   chmod 755 "$ROOT_UPDATE_LAUNCHER"
   chown root:root "$ROOT_UPDATE_LAUNCHER"
   log "    Refreshed root update launcher at $ROOT_UPDATE_LAUNCHER"
+}
+
+ensure_reboot_sudoers() {
+  local sudoers_file="/etc/sudoers.d/dmx-reboot"
+  local expected_line="$USER_NAME ALL=(root) NOPASSWD: /usr/sbin/reboot, /sbin/reboot, /usr/bin/reboot, /bin/reboot"
+
+  if [[ -f "$sudoers_file" ]] && grep -qF "$expected_line" "$sudoers_file" 2>/dev/null; then
+    log "    Reboot sudoers already configured"
+    return
+  fi
+
+  cat > "$sudoers_file" <<EOF
+$expected_line
+EOF
+  chmod 440 "$sudoers_file"
+  visudo -cf "$sudoers_file" >/dev/null 2>&1 || true
+  log "    Configured reboot sudoers at $sudoers_file"
 }
 
 stop_service_for_upgrade() {
@@ -542,6 +560,23 @@ restart_service() {
   echo
 }
 
+request_system_reboot() {
+  log "------------------------------------------------------"
+  log "STEP 4: Rebooting system to finish update..."
+
+  sync || true
+  if "$REBOOT_BIN"; then
+    RESTART_DONE=1
+    log "    Reboot initiated"
+    echo
+    return 0
+  fi
+
+  log "    Could not trigger system reboot, falling back to service restart"
+  echo
+  return 1
+}
+
 # ========================== MAIN ==========================
 log "======================================================"
 log "DMXSmartLink Upgrade Script (Raspberry Pi 5)"
@@ -557,6 +592,7 @@ log "STEP 1: Downloading latest release..."
 SRC_DIR=$(download_release "$DIST_DIR")
 refresh_root_update_worker_from_release "$SRC_DIR"
 refresh_root_update_launcher
+ensure_reboot_sudoers
 stop_service_for_upgrade
 
 # Upgrade files
@@ -571,7 +607,11 @@ update_python_deps
 # Update Homebridge
 update_homebridge
 
-# Restart service
+if request_system_reboot; then
+  exit 0
+fi
+
+# Restart service only if reboot could not be triggered
 restart_service
 
 log "======================================================"

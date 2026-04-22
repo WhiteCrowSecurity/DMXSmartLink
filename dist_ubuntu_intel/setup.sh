@@ -668,6 +668,26 @@ EOF
   echo
 }
 
+setup_reboot_sudoers() {
+  log "------------------------------------------------------"
+  log "STEP 12b: Configuring passwordless sudo for OS reboot..."
+
+  local sudoers_file="/etc/sudoers.d/dmx-reboot"
+  local expected_line="$USER_NAME ALL=(root) NOPASSWD: /usr/sbin/reboot, /sbin/reboot, /usr/bin/reboot, /bin/reboot"
+
+  if [ -f "$sudoers_file" ] && grep -qF "$expected_line" "$sudoers_file" 2>/dev/null; then
+    log "    ✓ Passwordless sudo already configured for reboot"
+  else
+    cat > "$sudoers_file" <<EOF
+$expected_line
+EOF
+    chmod 0440 "$sudoers_file"
+    visudo -cf "$sudoers_file" || true
+    log "    ✓ Passwordless sudo configured for OS reboot"
+  fi
+  echo
+}
+
 # ========================== MAIN ==========================
 log "âœ… STEP 1: Detected script directory: $SCRIPT_DIR (user = $USER_NAME)"
 
@@ -699,6 +719,7 @@ start_homebridge                # Starts with DBus exposed into container
 install_govee_plugin            # Installs plugin + BLE deps + setcap inside container
 write_service
 configure_passwordless_sudo     # Allow service user to restart service without password
+setup_reboot_sudoers            # Allow UI reboot without broad sudo access
 setup_audio_sudoers             # Allow bluetoothctl/pactl for UI
 install_root_update_helpers     # Install root-owned update launcher/worker
 setup_update_sudoers            # Allow Update Now launcher without broad sudo access
