@@ -1,5 +1,17 @@
 # DMXSmartLink Release Notes
 
+## 2026.04.21
+
+### Installer / Updater
+
+- `setup.sh` now survives GitHub API fallback cleanly by piping the release JSON into Python instead of accidentally treating JSON booleans like `false` as Python code.
+- `setup.sh` and `upgrade_pi5.sh` now allow warning-only `unzip` exits when the expected release files were still extracted, which fixes installs on Debian/Ubuntu where the previous public zip triggered a backslash path-separator warning.
+- Public `VERSION` files were updated to `2026.04.21` so installed systems show the installer fix date in the UI.
+
+### Packaging
+
+- `dmxsmartlink.zip` is rebuilt with forward-slash archive paths so Linux `unzip` no longer warns that the archive uses backslashes as path separators.
+
 ## 2026.04.19
 
 ### Update System
