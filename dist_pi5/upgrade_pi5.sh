@@ -87,6 +87,32 @@ PRESERVE_FILES=(
 
 log() { echo -e "$*" >&2; }
 
+extract_zip_allowing_warnings() {
+  local zip_path="$1"
+  local dest_dir="$2"
+  local unzip_output=""
+  local unzip_status=0
+
+  unzip_output="$(unzip -q "$zip_path" -d "$dest_dir" 2>&1)" || unzip_status=$?
+
+  if [[ $unzip_status -eq 0 ]]; then
+    return 0
+  fi
+
+  if find "$dest_dir" -mindepth 1 -print -quit 2>/dev/null | grep -q .; then
+    log "    unzip returned warning(s) but extracted files are present; continuing"
+    if [[ -n "$unzip_output" ]]; then
+      log "    unzip output: $(printf '%s' "$unzip_output" | head -n1)"
+    fi
+    return 0
+  fi
+
+  if [[ -n "$unzip_output" ]]; then
+    log "    unzip output: $(printf '%s' "$unzip_output" | head -n1)"
+  fi
+  return 1
+}
+
 # Check if installation exists
 check_installation() {
   if [[ ! -d "$TARGET_DIR" ]]; then
@@ -119,40 +145,50 @@ download_release() {
   # Try GitHub API first
   local API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
   local REL_JSON=""
+  local API_ERROR=""
   if command -v curl >/dev/null 2>&1; then
-    REL_JSON="$(curl -fsSL "$API_URL" 2>&1)"
-    if [ $? -ne 0 ] || echo "$REL_JSON" | grep -q "404\|Not Found"; then
-      log "    Latest release not found, trying tag 'DMXSmartLink'..."
+    if ! REL_JSON="$(curl -fsSL "$API_URL" 2>/dev/null)"; then
+      log "    Latest release lookup failed, trying tag 'DMXSmartLink'..."
       API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/tags/DMXSmartLink"
-      REL_JSON="$(curl -fsSL "$API_URL" 2>&1)"
+      if ! REL_JSON="$(curl -fsSL "$API_URL" 2>/dev/null)"; then
+        API_ERROR="api_failed"
+      fi
     fi
+  else
+    API_ERROR="no_curl"
   fi
   
   local DOWNLOAD_URL=""
-  if [[ -n "$REL_JSON" ]] && command -v python3 >/dev/null 2>&1; then
-    DOWNLOAD_URL="$(python3 - <<PY
-import json,sys
+  if [[ -z "$API_ERROR" ]] && [[ -n "$REL_JSON" ]] && command -v python3 >/dev/null 2>&1; then
+    DOWNLOAD_URL="$(
+      printf '%s' "$REL_JSON" | python3 -c '
+import json, sys
 try:
-    d=json.loads(sys.stdin.read() or "{}")
-    if "message" in d:
+    d = json.loads(sys.stdin.read() or "{}")
+    if isinstance(d, dict) and d.get("message"):
         print("")
         raise SystemExit(0)
-    assets=d.get("assets") or []
-    for a in assets:
-        u=a.get("browser_download_url","")
-        n=a.get("name","").lower()
-        if "dmxsmartlink" in n and n.endswith(".zip"):
-            print(u); raise SystemExit(0)
-    for a in assets:
-        u=a.get("browser_download_url","")
-        n=a.get("name","")
-        if u.endswith(".zip") or n.endswith(".zip"):
-            print(u); raise SystemExit(0)
-    print(d.get("zipball_url",""))
+
+    assets = d.get("assets") or []
+    for asset in assets:
+        url = asset.get("browser_download_url", "") or ""
+        name = (asset.get("name", "") or "").lower()
+        if "dmxsmartlink" in name and name.endswith(".zip") and url:
+            print(url)
+            raise SystemExit(0)
+
+    for asset in assets:
+        url = asset.get("browser_download_url", "") or ""
+        name = asset.get("name", "") or ""
+        if (url.endswith(".zip") or name.endswith(".zip")) and url:
+            print(url)
+            raise SystemExit(0)
+
+    print(d.get("zipball_url", "") or "")
 except Exception:
     print("")
-PY
-<<<"$REL_JSON" 2>&1)"
+' 2>/dev/null
+    )"
   fi
   
   # Fallback to direct download
@@ -167,7 +203,7 @@ PY
     exit 1
   fi
   
-  if ! unzip -q "$ZIP_PATH" -d "$TEMP_DIR" 2>/dev/null; then
+  if ! extract_zip_allowing_warnings "$ZIP_PATH" "$TEMP_DIR"; then
     log "âŒ Failed to extract zip file"
     rm -rf "$TEMP_DIR" "$ZIP_PATH"
     exit 1

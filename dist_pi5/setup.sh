@@ -1,5 +1,5 @@
 #!/bin/bash
-# setup.sh — DMXSmartLink installer (flat layout, Raspberry Pi OS/Ubuntu)
+# setup.sh â€” DMXSmartLink installer (flat layout, Raspberry Pi OS/Ubuntu)
 # - Uses any installed Python 3.x for the venv
 # - No CPython-from-source builds
 # - venv-only installs (PEP-668 safe)
@@ -38,6 +38,32 @@ GOVEE_PLUGIN="@homebridge-plugins/homebridge-govee@latest"
 GOVEE_REPO="github:homebridge-plugins/homebridge-govee#latest"
 
 log() { echo -e "$*"; }
+
+extract_zip_allowing_warnings() {
+  local zip_path="$1"
+  local dest_dir="$2"
+  local unzip_output=""
+  local unzip_status=0
+
+  unzip_output="$(unzip -q "$zip_path" -d "$dest_dir" 2>&1)" || unzip_status=$?
+
+  if [[ $unzip_status -eq 0 ]]; then
+    return 0
+  fi
+
+  if find "$dest_dir" -mindepth 1 -print -quit 2>/dev/null | grep -q .; then
+    log "    unzip returned warning(s) but extracted files are present; continuing"
+    if [[ -n "$unzip_output" ]]; then
+      log "    unzip output: $(printf '%s' "$unzip_output" | head -n1)"
+    fi
+    return 0
+  fi
+
+  if [[ -n "$unzip_output" ]]; then
+    log "    unzip output: $(printf '%s' "$unzip_output" | head -n1)"
+  fi
+  return 1
+}
 
 detect_architecture() {
   # Detect architecture and return the appropriate dist directory name
@@ -103,7 +129,7 @@ detect_architecture() {
 }
 
 copy_project() {
-  log "✅ STEP 2: Ensuring target folder: $TARGET_DIR"
+  log "âœ… STEP 2: Ensuring target folder: $TARGET_DIR"
   mkdir -p "$TARGET_DIR"
   chown "$USER_NAME:$USER_NAME" "$TARGET_DIR"
 
@@ -138,8 +164,8 @@ copy_project() {
 
   log "    Fetching latest release zip (no API): $LATEST_URL"
   if curl -fL "$LATEST_URL" -o "$ZIP_PATH" 2>/dev/null; then
-    log "    ✓ Downloaded latest release asset"
-    if unzip -q "$ZIP_PATH" -d "$TEMP_DIR" 2>/dev/null; then
+    log "    âœ“ Downloaded latest release asset"
+    if extract_zip_allowing_warnings "$ZIP_PATH" "$TEMP_DIR"; then
       local ROOT_DIR
       ROOT_DIR="$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
       if [[ -n "$ROOT_DIR" ]] && [[ -d "$ROOT_DIR/$DIST_DIR" ]]; then
@@ -151,7 +177,7 @@ copy_project() {
           SRC_DIR="$TEMP_DIR/$DIST_DIR"
           log "    Using extracted release folder (direct): $SRC_DIR"
         else
-          log "    ⚠ Directory $DIST_DIR not found in extracted zip"
+          log "    âš  Directory $DIST_DIR not found in extracted zip"
           log "    Available directories: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
           if [[ -n "$ROOT_DIR" ]]; then
             log "    Root dir contents: $(ls -1 "$ROOT_DIR" 2>/dev/null | head -10 | tr '\n' ' ')"
@@ -160,11 +186,11 @@ copy_project() {
         fi
       fi
     else
-      log "    ⚠ Failed to extract zip file"
+      log "    âš  Failed to extract zip file"
       SRC_DIR=""
     fi
   else
-    log "    ⚠ Failed to download latest asset (no API). Will try API fallback…"
+    log "    âš  Failed to download latest asset (no API). Will try API fallbackâ€¦"
   fi
 
   # ------------------------------------------------------------
@@ -188,55 +214,52 @@ copy_project() {
 
     local DOWNLOAD_URL=""
     if [[ -z "$API_ERROR" ]] && [[ -n "$REL_JSON" ]] && command -v python3 >/dev/null 2>&1; then
-      # IMPORTANT: keep stderr separate so DOWNLOAD_URL stays clean
+      # IMPORTANT: keep stderr separate so DOWNLOAD_URL stays clean.
+      # Use a pipe here so stdin carries JSON only; `python3 - <<'PY' <<<"$REL_JSON"`
+      # makes Python treat the JSON as code, which breaks on JSON booleans like `false`.
       DOWNLOAD_URL="$(
-        python3 - <<'PY' <<<"$REL_JSON"
-import json,sys
+        printf '%s' "$REL_JSON" | python3 -c '
+import json, sys
 try:
-    d=json.loads(sys.stdin.read() or "{}")
+    d = json.loads(sys.stdin.read() or "{}")
     if isinstance(d, dict) and d.get("message"):
-        # API error payload
         print("")
         raise SystemExit(0)
 
-    assets=d.get("assets") or []
+    assets = d.get("assets") or []
 
-    # Prefer an asset named like dmxsmartlink*.zip (case-insensitive)
-    for a in assets:
-        name=(a.get("name","") or "").lower()
-        url=a.get("browser_download_url","") or ""
+    for asset in assets:
+        name = (asset.get("name", "") or "").lower()
+        url = asset.get("browser_download_url", "") or ""
         if name.startswith("dmxsmartlink") and name.endswith(".zip") and url:
-            print(url); raise SystemExit(0)
+            print(url)
+            raise SystemExit(0)
 
-    for a in assets:
-        name=(a.get("name","") or "").lower()
-        url=a.get("browser_download_url","") or ""
+    for asset in assets:
+        name = (asset.get("name", "") or "").lower()
+        url = asset.get("browser_download_url", "") or ""
         if "dmxsmartlink" in name and name.endswith(".zip") and url:
-            print(url); raise SystemExit(0)
+            print(url)
+            raise SystemExit(0)
 
-    # Else: first .zip asset
-    for a in assets:
-        name=a.get("name","") or ""
-        url=a.get("browser_download_url","") or ""
+    for asset in assets:
+        name = asset.get("name", "") or ""
+        url = asset.get("browser_download_url", "") or ""
         if (name.endswith(".zip") or url.endswith(".zip")) and url:
-            print(url); raise SystemExit(0)
+            print(url)
+            raise SystemExit(0)
 
-    # Fallback to zipball_url (source code zip)
-    zipball=d.get("zipball_url","") or ""
-    if zipball:
-        print(zipball)
-    else:
-        print("")
+    print(d.get("zipball_url", "") or "")
 except Exception:
     print("")
-PY
+' 2>/dev/null
       )"
     fi
 
     if [[ -n "$DOWNLOAD_URL" ]]; then
       log "    Downloading release via API-derived URL: $DOWNLOAD_URL"
       if curl -fL "$DOWNLOAD_URL" -o "$ZIP_PATH" 2>/dev/null; then
-        if unzip -q "$ZIP_PATH" -d "$TEMP_DIR" 2>/dev/null; then
+        if extract_zip_allowing_warnings "$ZIP_PATH" "$TEMP_DIR"; then
           local ROOT_DIR
           ROOT_DIR="$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
           if [[ -n "$ROOT_DIR" ]] && [[ -d "$ROOT_DIR/$DIST_DIR" ]]; then
@@ -247,7 +270,7 @@ PY
               SRC_DIR="$TEMP_DIR/$DIST_DIR"
               log "    Using extracted release folder (direct): $SRC_DIR"
             else
-              log "    ⚠ Directory $DIST_DIR not found in extracted zip"
+              log "    âš  Directory $DIST_DIR not found in extracted zip"
               log "    Available directories: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
               if [[ -n "$ROOT_DIR" ]]; then
                 log "    Root dir contents: $(ls -1 "$ROOT_DIR" 2>/dev/null | head -10 | tr '\n' ' ')"
@@ -256,21 +279,21 @@ PY
             fi
           fi
         else
-          log "    ⚠ Failed to extract zip file"
+          log "    âš  Failed to extract zip file"
           SRC_DIR=""
         fi
       else
-        log "    ⚠ Failed to download zip file via API-derived URL"
+        log "    âš  Failed to download zip file via API-derived URL"
         SRC_DIR=""
       fi
     else
-      log "    ⚠ API fallback did not produce a download URL"
+      log "    âš  API fallback did not produce a download URL"
     fi
   fi
 
   # Final failure if still no source directory
   if [[ -z "${SRC_DIR:-}" ]]; then
-    log "❌ Failed to download release zip."
+    log "âŒ Failed to download release zip."
     log "    Primary (no-API) tried:"
     log "    $LATEST_URL"
     log "    Fallback tried GitHub API:"
@@ -290,15 +313,15 @@ PY
 
   # Copy EVERYTHING from the extracted dist folder into the install directory.
   # Exclusions prevent clobbering user data and venv.
-  rsync -a --delete --delete-delay --force \
-    --exclude="/.venv/" \
-    --exclude="/__pycache__/" \
-    --exclude="/.install_arch" \
-    --exclude="/config.json" \
-    --exclude="/devices.json" \
-    --exclude="/groups.json" \
+  rsync -a --delete \
+    --exclude=".venv/" \
+    --exclude="__pycache__/" \
+    --exclude=".install_arch" \
+    --exclude="config.json" \
+    --exclude="devices.json" \
+    --exclude="groups.json" \
     "$SRC_DIR/" "$TARGET_DIR/"
-  log "    ✓ Sync complete"
+  log "    âœ“ Sync complete"
 
   # Clean up temp download directory
   rm -rf "$TEMP_DIR" "$ZIP_PATH"
@@ -315,25 +338,21 @@ PY
 install_docker() {
   log "------------------------------------------------------"
   log "STEP 3: Installing Docker (apt, then fallback to get.docker.com if needed)..."
-  if command -v docker >/dev/null 2>&1; then
-    log "    Docker already installed: $(docker --version)"
-  else
-    apt_update || true
+  apt_update || true
   if ! apt_install docker.io; then
-    log "    apt install docker.io failed or unavailable; trying Docker convenience script…"
+    log "    apt install docker.io failed or unavailable; trying Docker convenience scriptâ€¦"
   fi
 
   if ! command -v docker >/dev/null 2>&1; then
     curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
     sh /tmp/get-docker.sh
   fi
-  fi
 
   systemctl enable docker
   systemctl start docker
 
   if ! command -v docker >/dev/null 2>&1; then
-    echo "❌ Docker CLI not found after installation attempts. Aborting."
+    echo "âŒ Docker CLI not found after installation attempts. Aborting."
     exit 10
   fi
   docker --version || true
@@ -379,7 +398,7 @@ install_ble_support_host() {
   systemctl restart bluetooth || true
 
   # Quick hint for the operator:
-  log "    → Host Bluetooth stack should now be active (check with: hciconfig or bluetoothctl show)."
+  log "    â†’ Host Bluetooth stack should now be active (check with: hciconfig or bluetoothctl show)."
   echo
 }
 
@@ -390,28 +409,26 @@ ensure_python() {
   # 1) Prefer any available python3.x version
   if command -v python3 >/dev/null 2>&1; then
     PYTHON_BIN="$(command -v python3)"
-    log "Found $("$PYTHON_BIN" -V) — will use this for the venv."
+    log "Found $("$PYTHON_BIN" -V) â€” will use this for the venv."
     return 0
   fi
 
   # 2) Fallback: if python3.13 exists, use it
   if command -v python3.13 >/dev/null 2>&1; then
     PYTHON_BIN="$(command -v python3.13)"
-    log "Found $("$PYTHON_BIN" -V) — will use this for the venv."
+    log "Found $("$PYTHON_BIN" -V) â€” will use this for the venv."
     return 0
   fi
 
   # If no Python 3.x is found
-  echo "❌ Python 3.x not found."
+  echo "âŒ Python 3.x not found."
   echo "   This project REQUIRES Python 3.x. Please install Python 3.x, then rerun this script."
   exit 2
 }
 
 create_venv_and_install() {
-  local pyver
-  pyver="$("$PYTHON_BIN" -c 'import sys; print(sys.version_info[0]*100 + sys.version_info[1])' 2>/dev/null || echo 0)"
   log "------------------------------------------------------"
-  log "STEP 6: Creating venv on Python 3.x and installing deps…"
+  log "STEP 6: Creating venv on Python 3.x and installing depsâ€¦"
   log "    Using interpreter: $("$PYTHON_BIN" -V)"
   sudo -u "$USER_NAME" bash -lc "
     set -e
@@ -422,8 +439,9 @@ create_venv_and_install() {
     pip install -U pip
     pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial psutil numpy sounddevice
     # aubio is optional. It is known to fail building on Python 3.13+ due to upstream C/Numpy API changes.
-    if [ '$pyver' -ge 313 ]; then
-      echo 'Skipping aubio install (optional; not compatible with Python 3.13+)'
+    PYVER=\$('\"$PYTHON_BIN\"' -c 'import sys; print(sys.version_info[0]*100 + sys.version_info[1])' 2>/dev/null || echo 0)
+    if [ \"\$PYVER\" -ge 313 ]; then
+      echo \"Skipping aubio install (optional; not compatible with Python 3.13+)\"
     else
       pip install -U aubio || true
     fi
@@ -460,7 +478,7 @@ start_homebridge() {
   log "------------------------------------------------------"
   log "STEP 8: Pulling Homebridge Docker image..."
   if ! command -v docker >/dev/null 2>&1; then
-    echo "❌ docker CLI not found; install_docker must succeed before this step."
+    echo "âŒ docker CLI not found; install_docker must succeed before this step."
     exit 11
   fi
   docker pull homebridge/homebridge
@@ -482,9 +500,9 @@ start_homebridge() {
   local DBUS_VOLUME=""
   if [[ -n "$DBUS_HOST_DIR" ]]; then
     DBUS_VOLUME="-v ${DBUS_HOST_DIR}:/run/dbus:ro"
-    log "    → Using DBus socket from ${DBUS_HOST_DIR} -> /run/dbus:ro in container."
+    log "    â†’ Using DBus socket from ${DBUS_HOST_DIR} -> /run/dbus:ro in container."
   else
-    log "    ⚠ WARNING: No DBus system_bus_socket found; BLE plugins may not work in Docker."
+    log "    âš  WARNING: No DBus system_bus_socket found; BLE plugins may not work in Docker."
   fi
 
   docker run -d \
@@ -495,8 +513,8 @@ start_homebridge() {
     -v "$CONFIG_DIR":/homebridge \
     homebridge/homebridge
 
-  log "    → Homebridge container started."
-  log "    → Visit http://<your-pi-or-ubuntu-ip>:8581 to finish Homebridge setup."
+  log "    â†’ Homebridge container started."
+  log "    â†’ Visit http://<your-pi-or-ubuntu-ip>:8581 to finish Homebridge setup."
   echo
 }
 
@@ -531,7 +549,7 @@ install_govee_plugin() {
 
   # Install build/runtime deps for noble stack inside the container
   docker exec -u root -e DEBIAN_FRONTEND=noninteractive -e NEEDRESTART_MODE=a homebridge \
-    bash -lc "touch /etc/modules && apt-get update -yq && apt-get install -yq --no-install-recommends git curl bluetooth bluez libbluetooth-dev libudev-dev || true"
+    bash -lc "apt-get update -yq && apt-get install -yq --no-install-recommends git curl bluetooth bluez libbluetooth-dev libudev-dev pi-bluetooth || true"
 
   # Install the plugin itself using the supported Homebridge service helper first.
   docker exec homebridge sh -lc "if command -v hb-service >/dev/null 2>&1; then hb-service --docker add '$GOVEE_PLUGIN'; elif command -v npm >/dev/null 2>&1; then cd /homebridge && npm install --save --force '$GOVEE_REPO'; else echo 'Neither hb-service nor npm is available in the Homebridge container.' >&2; exit 127; fi"
@@ -541,7 +559,7 @@ install_govee_plugin() {
 
   docker exec homebridge sh -lc "test -f /homebridge/node_modules/@homebridge-plugins/homebridge-govee/package.json"
   docker restart homebridge >/dev/null
-  log "    → Latest official Govee plugin installed, BLE deps present, and Homebridge restarted."
+  log "    â†’ Latest official Govee plugin installed, BLE deps present, and Homebridge restarted."
   echo
 }
 
@@ -581,24 +599,30 @@ EOF
 
 configure_passwordless_sudo() {
   log "------------------------------------------------------"
-  log "STEP 12: Configuring passwordless sudo for service restart..."
+  log "STEP 12: Configuring passwordless sudo for service control..."
 
-  local sudoers_entry="$USER_NAME ALL=(ALL) NOPASSWD: /bin/systemctl restart dmxsmartlink.service"
   local sudoers_file="/etc/sudoers.d/dmxsmartlink-restart"
+  local expected_stop="$USER_NAME ALL=(ALL) NOPASSWD: /bin/systemctl stop dmxsmartlink.service"
+  local expected_start="$USER_NAME ALL=(ALL) NOPASSWD: /bin/systemctl start dmxsmartlink.service"
+  local expected_restart="$USER_NAME ALL=(ALL) NOPASSWD: /bin/systemctl restart dmxsmartlink.service"
 
-  # Check if entry already exists
-  if [ -f "$sudoers_file" ] && grep -qF "$sudoers_entry" "$sudoers_file" 2>/dev/null; then
-    log "    ✓ Passwordless sudo already configured"
+  # Check if entries already exist
+  if [ -f "$sudoers_file" ] && grep -qF "$expected_stop" "$sudoers_file" 2>/dev/null && grep -qF "$expected_start" "$sudoers_file" 2>/dev/null && grep -qF "$expected_restart" "$sudoers_file" 2>/dev/null; then
+    log "    âœ“ Passwordless sudo already configured"
   else
-    echo "$sudoers_entry" > "$sudoers_file"
+    cat > "$sudoers_file" <<EOF
+$expected_stop
+$expected_start
+$expected_restart
+EOF
     chmod 0440 "$sudoers_file"
-    log "    ✓ Passwordless sudo configured for: systemctl restart dmxsmartlink.service"
+    log "    âœ“ Passwordless sudo configured for: systemctl stop/start/restart dmxsmartlink.service"
   fi
   echo
 }
 
 # ========================== MAIN ==========================
-log "✅ STEP 1: Detected script directory: $SCRIPT_DIR (user = $USER_NAME)"
+log "âœ… STEP 1: Detected script directory: $SCRIPT_DIR (user = $USER_NAME)"
 
 # Install git early if needed (for downloading from GitHub)
 if ! command -v git >/dev/null 2>&1; then
@@ -613,7 +637,7 @@ copy_project
 
 # Verify main.py was downloaded
 if [ ! -f "$TARGET_DIR/main.py" ]; then
-  log "❌ ERROR: main.py not found in $TARGET_DIR after download"
+  log "âŒ ERROR: main.py not found in $TARGET_DIR after download"
   exit 1
 fi
 
@@ -631,6 +655,6 @@ configure_passwordless_sudo     # Allow service user to restart service without 
 setup_audio_sudoers             # Allow bluetoothctl/pactl for UI
 setup_update_sudoers            # Allow apt-get/reboot for Update Now prereq installs
 
-log "✅ All steps complete."
+log "âœ… All steps complete."
 log "Service status (last 30 lines):"
 systemctl --no-pager -n 30 status dmxsmartlink.service || true
