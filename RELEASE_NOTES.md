@@ -6,6 +6,9 @@
 
 - Replaced native browser popups in the DMXSmartLink hub UI with in-app dialogs so confirmation, prompt, and alert flows work reliably in iPhone app WebView sessions.
 - Hardened dashboard/media UI guards so disconnected or partial state responses do not break the visible controls.
+- Added the standalone AI Slide Show experience with image uploads, manual previous/next controls, automatic timing, fullscreen presentation controls, and lighting target selection.
+- Fixed responsive overflow in the AI Slide Show and DMX fixture editor so upload panels, channel rows, capability rows, and action buttons stay inside their cards on iPhone-sized screens.
+- Removed the AI Slide Show shortcut from the main dashboard; the dashboard now keeps the existing Visual Control entry only.
 
 ### Visual Control
 
@@ -14,7 +17,7 @@
 
 ### Packaging
 
-- Refreshed the Pi5 public payload from the 2026.04.25 PyArmor build.
+- Refreshed the Pi5 public payload from the latest 2026.04.25 PyArmor build.
 - Intel and M4 compiled application payloads were not rebuilt for this release and remain unchanged.
 - Public Python application modules remain PyArmor-obfuscated; raw private source was not published.
 
