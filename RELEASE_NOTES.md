@@ -5,21 +5,38 @@
 ### iPhone App / UI
 
 - Replaced native browser popups in the DMXSmartLink hub UI with in-app dialogs so confirmation, prompt, and alert flows work reliably in iPhone app WebView sessions.
-- Hardened dashboard/media UI guards so disconnected or partial state responses do not break the visible controls.
-- Added the standalone AI Slide Show experience with image uploads, manual previous/next controls, automatic timing, fullscreen presentation controls, and lighting target selection.
-- Fixed responsive overflow in the AI Slide Show and DMX fixture editor so upload panels, channel rows, capability rows, and action buttons stay inside their cards on iPhone-sized screens.
+- Added iPhone-focused popup handling for common hub workflows, including confirm, prompt, and alert actions that previously depended on native browser dialogs.
+- Hardened dashboard, media, and UI state guards so disconnected or partial state responses do not break visible controls.
+- Improved mobile layout behavior across the app so cards, buttons, forms, and status rows wrap instead of overflowing on smaller iPhone screens.
 - Removed the AI Slide Show shortcut from the main dashboard; the dashboard now keeps the existing Visual Control entry only.
+
+### AI Slide Show
+
+- Added a standalone AI Slide Show page separate from AI Light Show (Audio Reactive), so image slideshows can be operated independently from audio-reactive lighting.
+- Added slide image upload support for JPG, PNG, and WebP files.
+- Added both automatic timed playback and manual Previous/Next controls so operators can let slides advance on a timer or take over pacing live.
+- Added a fullscreen slide screen designed for presentation use, with in-page fullscreen behavior that works better inside iPhone app WebView sessions.
+- Added slide thumbnail management controls, including per-slide navigation, reorder controls, and removal.
+- Added lighting target selection so slideshow-driven lighting can be aimed at selected fixture and group targets.
+
+### DMX Fixtures
+
+- Fixed responsive overflow in the DMX fixture editor so channel rows, advanced capability rows, output selectors, and action buttons stay inside their cards on iPhone-sized screens.
+- Improved wrapping for long fixture/channel labels and compact action buttons so the fixture editor remains usable on mobile without horizontal scrolling.
 
 ### Visual Control
 
 - Added per-client Visual Control ownership and epoch handling so a stale session cannot continue overriding a newer scene, brightness, effect, or power action selected from another device.
 - Multi-user scene changes now return explicit stale-control feedback to older sessions instead of silently losing the newer operator's changes.
+- Improved multi-user scene and visual control behavior so a newer operator's changes can take effect even when another browser or iPhone session is already connected.
 
 ### Packaging
 
 - Refreshed the Pi5 public payload from the latest 2026.04.25 PyArmor build.
 - Intel and M4 compiled application payloads were not rebuilt for this release and remain unchanged.
 - Public Python application modules remain PyArmor-obfuscated; raw private source was not published.
+- Rebuilt `dmxsmartlink.zip` with only the approved `dist_pi5/`, `dist_ubuntu_intel/`, and `dist_ubuntu_m4/` folders at the zip root.
+- Validated the live public release on the smoke-test Pi through the `Update Now` path, including file sync, dependency refresh, Homebridge/Govee refresh, reboot, service return, and route checks.
 
 ## 2026.04.22
 
