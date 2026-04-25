@@ -1,5 +1,23 @@
 # DMXSmartLink Release Notes
 
+## 2026.04.25
+
+### iPhone App / UI
+
+- Replaced native browser popups in the DMXSmartLink hub UI with in-app dialogs so confirmation, prompt, and alert flows work reliably in iPhone app WebView sessions.
+- Hardened dashboard/media UI guards so disconnected or partial state responses do not break the visible controls.
+
+### Visual Control
+
+- Added per-client Visual Control ownership and epoch handling so a stale session cannot continue overriding a newer scene, brightness, effect, or power action selected from another device.
+- Multi-user scene changes now return explicit stale-control feedback to older sessions instead of silently losing the newer operator's changes.
+
+### Packaging
+
+- Refreshed the Pi5 public payload from the 2026.04.25 PyArmor build.
+- Intel and M4 compiled application payloads were not rebuilt for this release and remain unchanged.
+- Public Python application modules remain PyArmor-obfuscated; raw private source was not published.
+
 ## 2026.04.22
 
 ### Updater
