@@ -1,5 +1,15 @@
 # DMXSmartLink Release Notes
 
+## 2026.04.29
+
+### Pi5 Service Reliability
+
+- Refreshed the Pi5 public payload from a new `linux.aarch64` PyArmor build.
+- Hardened the embedded HTTPS app server so slow or abandoned TLS clients cannot stall the port `5000` accept loop.
+- Added threaded request handling, a per-connection timeout, and a local health watchdog so `systemd` can restart `dmxsmartlink.service` if the web UI stops answering.
+- Updated the Pi5 public `VERSION` file to `2026.04.29` so installed hubs detect this release through `Update Now`.
+- Intel and M4 compiled application payloads were not rebuilt for this release and remain unchanged.
+
 ## 2026.04.25
 
 ### iPhone App / UI
