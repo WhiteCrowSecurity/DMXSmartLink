@@ -1,0 +1,5 @@
+# PyArmor-obfuscated payloads + native libs + release zip: treat as binary so git
+# never applies line-ending conversion (which would corrupt the embedded bytecode).
+dist_*/**/*.py  -text
+dist_*/**/*.so  binary
+*.zip           binary
