@@ -598,14 +598,21 @@ install_govee_plugin() {
   docker exec -u root -e DEBIAN_FRONTEND=noninteractive -e NEEDRESTART_MODE=a homebridge \
     bash -lc "apt-get update -yq && apt-get install -yq --no-install-recommends git curl bluetooth bluez libbluetooth-dev libudev-dev pi-bluetooth || true"
 
-  # Install the plugin itself using the supported Homebridge service helper first.
-  docker exec homebridge sh -lc "if command -v hb-service >/dev/null 2>&1; then hb-service --docker add '$GOVEE_PLUGIN'; elif command -v npm >/dev/null 2>&1; then cd /homebridge && npm install --save --force '$GOVEE_REPO'; else echo 'Neither hb-service nor npm is available in the Homebridge container.' >&2; exit 127; fi"
-
-  # Give node cap_net_raw so noble can open HCI sockets if needed
-  docker exec -u root homebridge bash -lc 'setcap cap_net_raw+eip "$(eval readlink -f "$(which node)")" || true'
-
-  docker exec homebridge sh -lc "test -f /homebridge/node_modules/@homebridge-plugins/homebridge-govee/package.json"
-  docker restart homebridge >/dev/null
+  # Install the plugin (BEST-EFFORT). The DMXSmartLink dashboard does NOT require the
+  # Govee plugin to run, so a plugin/npm hiccup (e.g. a transient ENOTEMPTY) must never
+  # abort the whole install -- otherwise the dmxsmartlink service below never gets created.
+  if docker exec homebridge sh -lc "if command -v hb-service >/dev/null 2>&1; then hb-service --docker add '$GOVEE_PLUGIN'; elif command -v npm >/dev/null 2>&1; then cd /homebridge && npm install --save --force '$GOVEE_REPO'; else echo 'Neither hb-service nor npm is available in the Homebridge container.' >&2; exit 127; fi"; then
+    # Give node cap_net_raw so noble can open HCI sockets if needed
+    docker exec -u root homebridge bash -lc 'setcap cap_net_raw+eip "$(eval readlink -f "$(which node)")" || true' || true
+    if docker exec homebridge sh -lc "test -f /homebridge/node_modules/@homebridge-plugins/homebridge-govee/package.json"; then
+      log "    Govee plugin installed."
+    else
+      log "    WARNING: Govee plugin reported installed but package not found; continuing."
+    fi
+  else
+    log "    WARNING: Govee plugin install failed (non-fatal). The dashboard will still run; install the Govee plugin later from the Homebridge UI."
+  fi
+  docker restart homebridge >/dev/null 2>&1 || true
   log "    â†’ Latest official Govee plugin installed, BLE deps present, and Homebridge restarted."
   echo
 }
