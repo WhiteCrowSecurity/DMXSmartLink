@@ -1,5 +1,38 @@
 # DMXSmartLink Release Notes
 
+## 2026.06.15
+
+### Fixture Library
+
+- Added a built-in fixture library with hundreds of ready-to-use fixture profiles, browsable and searchable directly in the hub.
+- Added a fixture library page to search, filter, and add any fixture to your rig in one step.
+- Added fixture import from CSV files, supporting both comma- and tab-separated exports so profiles from common lighting tools import cleanly.
+- Added an in-app download to fetch and merge thousands of additional fixtures from the open Open Fixture Library and FreeStyler collections, skipping any already in your library.
+- Added fixture export to Open Fixture Library and FreeStyler formats, so you can back up your own profiles or share custom ones with those communities.
+- Added an option to share your custom fixture profiles with us so future releases can ship with broader fixture coverage.
+- Custom fixtures you add are now tagged separately from the built-in library, so they are easy to find and export on their own.
+
+### Visual Control
+
+- Rebuilt the strobe control so setting a strobe value reliably starts and stops the strobe, and fixed a case where a strobe could stay stuck on.
+- Restored the strobe control for fixtures that support it, and rebuilt the dropdown/selector and button capability controls so they map to each fixture correctly.
+
+### DMX Output
+
+- Fixed fixtures flashing after a power cycle, and rear fixture address displays staying lit, by holding the DMX line briefly after activity and then letting it idle.
+
+### DMX Fixtures
+
+- Fixed Duplicate Fixture so the copy is placed on the next free DMX address instead of overlapping the original fixture.
+
+### Packaging
+
+- Refreshed all three platform payloads (Pi5, Intel x86-64, and Apple Silicon / Ubuntu-ARM) for this release; each is compiled for its own platform's Python so it installs and runs without any Python version juggling.
+- The Apple Silicon / Ubuntu-ARM payload is freshly compiled for this release.
+- All public Python application modules remain PyArmor-obfuscated; raw private source was not published.
+- Updated public `VERSION` files to `2026.06.15` so installed hubs detect this release through `Update Now`.
+- Rebuilt `dmxsmartlink.zip` with only the approved `dist_pi5/`, `dist_ubuntu_intel/`, and `dist_ubuntu_m4/` folders at the zip root, using forward-slash archive paths.
+
 ## 2026.04.29
 
 ### Pi5 Service Reliability
