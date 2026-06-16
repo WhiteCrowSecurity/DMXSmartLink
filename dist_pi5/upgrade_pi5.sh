@@ -409,6 +409,36 @@ update_python_deps() {
   echo
 }
 
+# If the release just synced is a Nuitka standalone build, convert the service to
+# run the binary directly and retire the old PyArmor venv. Returns 0 when it
+# converted (caller then skips the venv refresh), 1 for a PyArmor release. Never
+# touches user data (config/devices/groups/scenes/license files are untouched).
+convert_to_nuitka_if_needed() {
+  local bin="$TARGET_DIR/main.dist/main.bin"
+  [[ -f "$bin" ]] || return 1
+  log "------------------------------------------------------"
+  log "Nuitka standalone build detected - converting service to the binary..."
+  # Install the OS prerequisites the standalone binary needs at runtime (audio,
+  # BLE, ffmpeg, ...). An old client's update path never installed them; reuse the
+  # freshly-synced setup.sh in prerequisites-only mode — one source of truth,
+  # idempotent. This runs as root here (the update worker is root).
+  if [[ -f "$TARGET_DIR/setup.sh" ]]; then
+    log "Installing runtime prerequisites for the Nuitka build (setup.sh --prereqs-only)..."
+    bash "$TARGET_DIR/setup.sh" --prereqs-only || log "    WARN: prerequisite install reported an issue (continuing)"
+  fi
+  chmod 755 "$bin" 2>/dev/null || true
+  local svc="/etc/systemd/system/dmxsmartlink.service"
+  if [[ -f "$svc" ]] && grep -q '[.]venv/bin/python' "$svc"; then
+    sed -i "s#^ExecStart=.*#ExecStart=$bin#" "$svc"
+    sed -i "s#$TARGET_DIR/[.]venv/bin:##g" "$svc"
+    "$SYSTEMCTL_BIN" daemon-reload || true
+    log "    Service ExecStart rewritten to the Nuitka binary; venv retired"
+  fi
+  rm -rf "$TARGET_DIR/.venv" 2>/dev/null || true
+  echo
+  return 0
+}
+
 # Update Homebridge container and Govee plugin
 update_homebridge() {
   log "------------------------------------------------------"
@@ -601,8 +631,10 @@ upgrade_files "$SRC_DIR"
 # Cleanup temp files from download
 rm -rf "/tmp/dmxsmartlink-upgrade-$$" "/tmp/dmxsmartlink-release-$$.zip" 2>/dev/null || true
 
-# Update Python dependencies
-update_python_deps
+# Update Python dependencies (PyArmor) OR convert the service to the Nuitka binary
+if ! convert_to_nuitka_if_needed; then
+  update_python_deps
+fi
 
 # Update Homebridge
 update_homebridge

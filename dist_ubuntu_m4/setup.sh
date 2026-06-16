@@ -430,6 +430,12 @@ ensure_python() {
 
 create_venv_and_install() {
   log "------------------------------------------------------"
+  if [[ -f "$TARGET_DIR/main.dist/main.bin" ]]; then
+    log "STEP 6: Nuitka standalone build detected â€” skipping app venv (binary is self-contained)."
+    chmod 755 "$TARGET_DIR/main.dist/main.bin" 2>/dev/null || true
+    echo
+    return 0
+  fi
   log "STEP 6: Creating venv on Python 3.x and installing depsâ€¦"
   log "    Using interpreter: $("$PYTHON_BIN" -V)"
   sudo -u "$USER_NAME" bash -lc "
@@ -618,8 +624,18 @@ install_govee_plugin() {
 }
 
 write_service() {
-  local entry_abs="/home/$USER_NAME/dmxsmartlink/main.py"
   local workdir="/home/$USER_NAME/dmxsmartlink"
+  local exec_start venv_path
+
+  if [[ -f "$workdir/main.dist/main.bin" ]]; then
+    # Nuitka standalone build â€” run the self-contained binary directly (no venv).
+    exec_start="$workdir/main.dist/main.bin"
+    venv_path=""
+  else
+    # PyArmor build â€” run the obfuscated app under the venv interpreter.
+    exec_start="$workdir/.venv/bin/python $workdir/main.py"
+    venv_path="$workdir/.venv/bin:"
+  fi
 
   log "------------------------------------------------------"
   log "STEP 11: Creating systemd service at $SERVICE_FILE..."
@@ -633,13 +649,13 @@ Requires=docker.service
 User=$USER_NAME
 WorkingDirectory=$workdir
 ExecStartPre=/usr/bin/docker pull homebridge/homebridge
-ExecStart=/home/$USER_NAME/dmxsmartlink/.venv/bin/python $entry_abs
+ExecStart=$exec_start
 Restart=always
 RestartSec=5
 UMask=0002
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=$workdir
-Environment=PATH=/home/$USER_NAME/dmxsmartlink/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+Environment=PATH=${venv_path}/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 
 [Install]
 WantedBy=multi-user.target
@@ -697,6 +713,24 @@ EOF
 
 # ========================== MAIN ==========================
 log "âœ… STEP 1: Detected script directory: $SCRIPT_DIR (user = $USER_NAME)"
+
+# Prerequisites-only mode: install just the runtime OS packages a fresh install
+# would (base tooling + host Bluetooth/BLE), then exit. The Nuitka-conversion
+# updater (upgrade_pi5.sh) invokes this so an old client picks up prerequisites
+# its original install never had: the standalone binary bundles Python but still
+# needs the system audio (portaudio/pipewire/ffmpeg) and BLE (bluez) packages at
+# runtime. Idempotent (apt no-ops when already present); must run as root for apt.
+if [[ "${1:-}" == "--prereqs-only" ]]; then
+  if [[ "$(id -u)" -ne 0 ]]; then
+    log "ERROR: --prereqs-only must run as root (apt installs)."
+    exit 1
+  fi
+  log "Prerequisites-only mode: installing runtime OS prerequisites..."
+  ensure_base_tooling
+  install_ble_support_host
+  log "Prerequisites installed."
+  exit 0
+fi
 
 # Install git early if needed (for downloading from GitHub)
 if ! command -v git >/dev/null 2>&1; then
