@@ -164,8 +164,23 @@ copy_project() {
   local SRC_DIR=""
   local LATEST_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/dmxsmartlink.zip"
 
-  log "    Fetching latest release zip (no API): $LATEST_URL"
-  if curl -fL "$LATEST_URL" -o "$ZIP_PATH" 2>/dev/null; then
+  # Resolve the update channel. A 'test' box (dev only) installs the newest GitHub
+  # PRE-RELEASE via the API path below; the no-API 'latest' shortcut is stable-only
+  # (GitHub's 'latest' excludes pre-releases). Set by --test-channel / DMXSMARTLINK_CHANNEL,
+  # or an existing update_channel marker on a re-run.
+  local CHANNEL="${DMXSMARTLINK_CHANNEL:-stable}"
+  if [[ "$CHANNEL" != "test" ]] && [[ "$(cat "$TARGET_DIR/update_channel" 2>/dev/null | tr -d '[:space:]')" == "test" ]]; then
+    CHANNEL="test"
+  fi
+  [[ "$CHANNEL" == "test" ]] || CHANNEL="stable"
+  log "    Update channel: $CHANNEL"
+
+  if [[ "$CHANNEL" == "stable" ]]; then
+    log "    Fetching latest release zip (no API): $LATEST_URL"
+  else
+    log "    Test channel: skipping no-API latest; will resolve newest pre-release via API"
+  fi
+  if [[ "$CHANNEL" == "stable" ]] && curl -fL "$LATEST_URL" -o "$ZIP_PATH" 2>/dev/null; then
     log "    âœ“ Downloaded latest release asset"
     if extract_zip_allowing_warnings "$ZIP_PATH" "$TEMP_DIR"; then
       local ROOT_DIR
@@ -202,6 +217,10 @@ copy_project() {
   if [[ -z "${SRC_DIR:-}" ]]; then
     log "    Fetching via GitHub API fallback..."
     local API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+    if [[ "$CHANNEL" == "test" ]]; then
+      # the releases list (newest-first) so we can select the newest pre-release
+      API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20"
+    fi
     local REL_JSON=""
     local API_ERROR=""
 
@@ -220,42 +239,54 @@ copy_project() {
       # Use a pipe here so stdin carries JSON only; `python3 - <<'PY' <<<"$REL_JSON"`
       # makes Python treat the JSON as code, which breaks on JSON booleans like `false`.
       DOWNLOAD_URL="$(
-        printf '%s' "$REL_JSON" | python3 -c '
-import json, sys
-try:
-    d = json.loads(sys.stdin.read() or "{}")
-    if isinstance(d, dict) and d.get("message"):
-        print("")
-        raise SystemExit(0)
+        printf '%s' "$REL_JSON" | CHANNEL="$CHANNEL" python3 -c '
+import json, os, sys
+CHANNEL = os.environ.get("CHANNEL", "stable")
 
-    assets = d.get("assets") or []
-
+def zip_from(rel):
+    assets = rel.get("assets") or []
     for asset in assets:
         name = (asset.get("name", "") or "").lower()
         url = asset.get("browser_download_url", "") or ""
         if name.startswith("dmxsmartlink") and name.endswith(".zip") and url:
-            print(url)
-            raise SystemExit(0)
-
+            return url
     for asset in assets:
         name = (asset.get("name", "") or "").lower()
         url = asset.get("browser_download_url", "") or ""
         if "dmxsmartlink" in name and name.endswith(".zip") and url:
-            print(url)
-            raise SystemExit(0)
-
+            return url
     for asset in assets:
         name = asset.get("name", "") or ""
         url = asset.get("browser_download_url", "") or ""
         if (name.endswith(".zip") or url.endswith(".zip")) and url:
-            print(url)
-            raise SystemExit(0)
+            return url
+    return rel.get("zipball_url", "") or ""
 
-    print(d.get("zipball_url", "") or "")
+try:
+    d = json.loads(sys.stdin.read() or "{}")
+    if CHANNEL == "test" and isinstance(d, list):
+        # the releases list is newest-first; take the newest pre-release
+        for rel in d:
+            if isinstance(rel, dict) and rel.get("prerelease"):
+                print(zip_from(rel))
+                raise SystemExit(0)
+        print("")  # no pre-release -> stable fallback handled by caller
+        raise SystemExit(0)
+    if isinstance(d, dict) and d.get("message"):
+        print("")
+        raise SystemExit(0)
+    print(zip_from(d) if isinstance(d, dict) else "")
 except Exception:
     print("")
 ' 2>/dev/null
       )"
+
+    # Test channel with no pre-release available: never leave the box without a
+    # source -- fall back to the stable 'latest' asset.
+    if [[ -z "$DOWNLOAD_URL" ]] && [[ "$CHANNEL" == "test" ]]; then
+      log "    No pre-release found; falling back to stable latest."
+      DOWNLOAD_URL="$LATEST_URL"
+    fi
     fi
 
     if [[ -n "$DOWNLOAD_URL" ]]; then
@@ -322,6 +353,8 @@ except Exception:
     --exclude="config.json" \
     --exclude="devices.json" \
     --exclude="groups.json" \
+    --exclude="dev_mode" \
+    --exclude="update_channel" \
     "$SRC_DIR/" "$TARGET_DIR/"
   log "    âœ“ Sync complete"
 
@@ -333,6 +366,16 @@ except Exception:
   find "$TARGET_DIR" -type f -exec chmod 664 {} \;
   # Ensure .so files are executable (required for PyArmor runtime)
   find "$TARGET_DIR" -name "*.so" -exec chmod 755 {} \;
+
+  # On the test channel, leave the box dev-enabled + pinned to test so future
+  # Update Now runs keep pulling pre-releases. Both markers are cwd-relative user
+  # data (rsync-excluded above), so they persist across upgrades.
+  if [[ "$CHANNEL" == "test" ]]; then
+    printf 'test\n' > "$TARGET_DIR/update_channel"
+    : > "$TARGET_DIR/dev_mode"
+    chown "$USER_NAME:$USER_NAME" "$TARGET_DIR/update_channel" "$TARGET_DIR/dev_mode"
+    log "    Test channel: wrote dev_mode + update_channel=test"
+  fi
 
   echo
 }
@@ -735,6 +778,17 @@ if [[ "${1:-}" == "--prereqs-only" ]]; then
   log "Prerequisites installed."
   exit 0
 fi
+
+# --test-channel (dev only): install from the newest GitHub PRE-RELEASE instead of the
+# public 'latest', and leave the box dev-enabled + pinned to the test channel (copy_project
+# reads DMXSMARTLINK_CHANNEL and writes the markers). Scanned across all args so it can sit
+# anywhere; equivalent to exporting DMXSMARTLINK_CHANNEL=test.
+for _arg in "$@"; do
+  if [[ "$_arg" == "--test-channel" ]]; then
+    export DMXSMARTLINK_CHANNEL="test"
+    log "Test channel selected: installing the newest pre-release (dev mode)."
+  fi
+done
 
 # Install git early if needed (for downloading from GitHub)
 if ! command -v git >/dev/null 2>&1; then

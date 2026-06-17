@@ -238,60 +238,90 @@ download_release() {
   rm -rf "$TEMP_DIR" "$ZIP_PATH"
   mkdir -p "$TEMP_DIR"
   
+  # Resolve the update channel: a 'test' box (dev only) pulls the newest GitHub
+  # PRE-RELEASE; everyone else (default, or 'stable') uses the public 'latest'. The
+  # marker is cwd-relative user data and survives upgrades like other settings.
+  local CHANNEL="stable"
+  if [[ "$(cat "$TARGET_DIR/update_channel" 2>/dev/null | tr -d '[:space:]')" == "test" ]]; then
+    CHANNEL="test"
+  fi
+  log "    Update channel: $CHANNEL"
+
   log "    Using architecture: $DIST_DIR"
-  log "    Fetching latest release zip..."
-  
-  # Try GitHub API first
-  local API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+  log "    Fetching ${CHANNEL} release zip..."
+
+  # API endpoint depends on channel: stable = /releases/latest (one release, excludes
+  # pre-releases); test = /releases (the list) so we can pick the newest pre-release.
+  local API_URL=""
+  if [[ "$CHANNEL" == "test" ]]; then
+    API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20"
+  else
+    API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+  fi
   local REL_JSON=""
   local API_ERROR=""
   if command -v curl >/dev/null 2>&1; then
     if ! REL_JSON="$(curl -fsSL "$API_URL" 2>/dev/null)"; then
-      log "    Latest release lookup failed, trying tag 'DMXSmartLink'..."
-      API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/tags/DMXSmartLink"
-      if ! REL_JSON="$(curl -fsSL "$API_URL" 2>/dev/null)"; then
+      if [[ "$CHANNEL" == "stable" ]]; then
+        log "    Latest release lookup failed, trying tag 'DMXSmartLink'..."
+        API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/tags/DMXSmartLink"
+        if ! REL_JSON="$(curl -fsSL "$API_URL" 2>/dev/null)"; then
+          API_ERROR="api_failed"
+        fi
+      else
         API_ERROR="api_failed"
       fi
     fi
   else
     API_ERROR="no_curl"
   fi
-  
+
   local DOWNLOAD_URL=""
   if [[ -z "$API_ERROR" ]] && [[ -n "$REL_JSON" ]] && command -v python3 >/dev/null 2>&1; then
     DOWNLOAD_URL="$(
-      printf '%s' "$REL_JSON" | python3 -c '
-import json, sys
-try:
-    d = json.loads(sys.stdin.read() or "{}")
-    if isinstance(d, dict) and d.get("message"):
-        print("")
-        raise SystemExit(0)
+      printf '%s' "$REL_JSON" | CHANNEL="$CHANNEL" python3 -c '
+import json, os, sys
+CHANNEL = os.environ.get("CHANNEL", "stable")
 
-    assets = d.get("assets") or []
-    for asset in assets:
+def zip_from(rel):
+    for asset in (rel.get("assets") or []):
         url = asset.get("browser_download_url", "") or ""
         name = (asset.get("name", "") or "").lower()
         if "dmxsmartlink" in name and name.endswith(".zip") and url:
-            print(url)
-            raise SystemExit(0)
-
-    for asset in assets:
+            return url
+    for asset in (rel.get("assets") or []):
         url = asset.get("browser_download_url", "") or ""
         name = asset.get("name", "") or ""
         if (url.endswith(".zip") or name.endswith(".zip")) and url:
-            print(url)
-            raise SystemExit(0)
+            return url
+    return rel.get("zipball_url", "") or ""
 
-    print(d.get("zipball_url", "") or "")
+try:
+    d = json.loads(sys.stdin.read() or "{}")
+    if CHANNEL == "test" and isinstance(d, list):
+        # the releases list is newest-first; take the newest pre-release
+        for rel in d:
+            if isinstance(rel, dict) and rel.get("prerelease"):
+                print(zip_from(rel))
+                raise SystemExit(0)
+        print("")  # no pre-release -> caller falls back to stable
+        raise SystemExit(0)
+    if isinstance(d, dict) and d.get("message"):
+        print("")
+        raise SystemExit(0)
+    print(zip_from(d) if isinstance(d, dict) else "")
 except Exception:
     print("")
 ' 2>/dev/null
     )"
   fi
-  
-  # Fallback to direct download
+
+  # Fallback to direct download (stable 'latest'). A test box with no pre-release
+  # available also lands here, so it is never left without an update source.
   if [[ -z "$DOWNLOAD_URL" ]] || [[ "$DOWNLOAD_URL" == "" ]]; then
+    if [[ "$CHANNEL" == "test" ]]; then
+      log "    No pre-release found; falling back to stable latest."
+    fi
     DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/dmxsmartlink.zip"
   fi
   
