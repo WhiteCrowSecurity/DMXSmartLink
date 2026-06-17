@@ -605,21 +605,25 @@ install_govee_plugin() {
     bash -lc "apt-get update -yq && apt-get install -yq --no-install-recommends git curl bluetooth bluez libbluetooth-dev libudev-dev pi-bluetooth || true"
 
   # Install the plugin (BEST-EFFORT). The DMXSmartLink dashboard does NOT require the
-  # Govee plugin to run, so a plugin/npm hiccup (e.g. a transient ENOTEMPTY) must never
-  # abort the whole install -- otherwise the dmxsmartlink service below never gets created.
-  if docker exec homebridge sh -lc "if command -v hb-service >/dev/null 2>&1; then hb-service --docker add '$GOVEE_PLUGIN'; elif command -v npm >/dev/null 2>&1; then cd /homebridge && npm install --save --force '$GOVEE_REPO'; else echo 'Neither hb-service nor npm is available in the Homebridge container.' >&2; exit 127; fi"; then
+  # Govee plugin to run, so a plugin/npm hiccup must never abort the whole install --
+  # otherwise the dmxsmartlink service below never gets created. The Homebridge image's
+  # bundled @matter/node trips npm ENOTEMPTY on a plain install, so use --legacy-peer-deps
+  # and, on failure, a clean retry (drop the conflicting @matter + npm cache). Report
+  # HONESTLY -- only claim success when the package is actually present.
+  _govee_present() { docker exec homebridge sh -lc "test -f /var/lib/homebridge/node_modules/@homebridge-plugins/homebridge-govee/package.json"; }
+  docker exec homebridge sh -lc "cd /var/lib/homebridge && npm install --save --no-audit --no-fund --legacy-peer-deps '$GOVEE_PLUGIN'" >/dev/null 2>&1 || true
+  if ! _govee_present; then
+    log "    First attempt failed (npm conflict); clean retry..."
+    docker exec -u root homebridge sh -lc "cd /var/lib/homebridge && rm -rf node_modules/@matter node_modules/@homebridge-plugins/homebridge-govee 2>/dev/null; npm cache clean --force >/dev/null 2>&1; npm install --save --no-audit --no-fund --legacy-peer-deps '$GOVEE_PLUGIN'" >/dev/null 2>&1 || true
+  fi
+  if _govee_present; then
     # Give node cap_net_raw so noble can open HCI sockets if needed
     docker exec -u root homebridge bash -lc 'setcap cap_net_raw+eip "$(eval readlink -f "$(which node)")" || true' || true
-    if docker exec homebridge sh -lc "test -f /homebridge/node_modules/@homebridge-plugins/homebridge-govee/package.json"; then
-      log "    Govee plugin installed."
-    else
-      log "    WARNING: Govee plugin reported installed but package not found; continuing."
-    fi
+    log "    ✓ Govee plugin installed."
   else
-    log "    WARNING: Govee plugin install failed (non-fatal). The dashboard will still run; install the Govee plugin later from the Homebridge UI."
+    log "    ⚠ Govee plugin install FAILED (non-fatal) — dashboard still runs; add it later from the Homebridge UI (Plugins → search 'Govee')."
   fi
   docker restart homebridge >/dev/null 2>&1 || true
-  log "    â†’ Latest official Govee plugin installed, BLE deps present, and Homebridge restarted."
   echo
 }
 
