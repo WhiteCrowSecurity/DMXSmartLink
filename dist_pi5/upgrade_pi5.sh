@@ -556,12 +556,16 @@ except:
     docker exec -u root -e DEBIAN_FRONTEND=noninteractive -e NEEDRESTART_MODE=a "$container_name" \
       bash -lc "apt-get update -yq && apt-get install -yq --no-install-recommends git curl bluetooth bluez libbluetooth-dev libudev-dev pi-bluetooth || true" >/dev/null 2>&1 || true
     
-    docker exec "$container_name" sh -lc "if command -v hb-service >/dev/null 2>&1; then hb-service --docker add '$GOVEE_PLUGIN'; elif command -v npm >/dev/null 2>&1; then cd /homebridge && npm install --save --force '$GOVEE_REPO'; else echo 'Neither hb-service nor npm is available in the Homebridge container.' >&2; exit 127; fi" >/dev/null 2>&1
-    
+    # The Homebridge image's bundled @matter/node trips npm ENOTEMPTY on a plain
+    # install; use --legacy-peer-deps + a clean retry, and report honestly.
+    _govee_present() { docker exec "$container_name" sh -lc "test -f /var/lib/homebridge/node_modules/@homebridge-plugins/homebridge-govee/package.json"; }
+    docker exec "$container_name" sh -lc "cd /var/lib/homebridge && npm install --save --no-audit --no-fund --legacy-peer-deps '$GOVEE_PLUGIN'" >/dev/null 2>&1 || true
+    if ! _govee_present; then
+      docker exec -u root "$container_name" sh -lc "cd /var/lib/homebridge && rm -rf node_modules/@matter node_modules/@homebridge-plugins/homebridge-govee 2>/dev/null; npm cache clean --force >/dev/null 2>&1; npm install --save --no-audit --no-fund --legacy-peer-deps '$GOVEE_PLUGIN'" >/dev/null 2>&1 || true
+    fi
     docker exec -u root "$container_name" bash -lc 'setcap cap_net_raw+eip "$(eval readlink -f "$(which node)")" || true' >/dev/null 2>&1 || true
-    
     docker restart "$container_name" >/dev/null 2>&1
-    log "    âœ“ Govee plugin installed/updated"
+    if _govee_present; then log "    ✓ Govee plugin installed/updated"; else log "    ⚠ Govee plugin install failed (non-fatal) — add it from the Homebridge UI"; fi
   else
     log "    âš  Container not running, skipping Govee plugin installation"
   fi
