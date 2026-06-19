@@ -166,7 +166,7 @@ Valid: Expires on ...
 
 ---
 
-### 14. DMX Software Configuration (Example: LightKey)
+### 14. DMX Software Configuration (Example: any Art-Net controller)
 1. Add **Universe 2**
 2. Add **Generic → Bulb**
 3. Edit profile and set **5 channels**

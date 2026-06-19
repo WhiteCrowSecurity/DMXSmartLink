@@ -469,6 +469,43 @@ convert_to_nuitka_if_needed() {
   return 0
 }
 
+# Self-heal: the running app reads its data (config/groups/fixtures/scenes/license)
+# from the service's WorkingDirectory, which is meant to equal the install dir
+# ($TARGET_DIR). If a unit was ever pointed at a different folder (e.g. an old dev
+# path), updates land in $TARGET_DIR while the app keeps reading the other dir, so
+# updates silently never take effect. Realign it here. Idempotent: a no-op for the
+# standard install (WorkingDirectory already == $TARGET_DIR). When drift is found the
+# live state is migrated into $TARGET_DIR first so the box never loses its patch, and
+# the previous dir is left intact (replaced files are backed up).
+realign_service_workdir() {
+  local svc="/etc/systemd/system/dmxsmartlink.service"
+  [[ -f "$svc" ]] || return 0
+  local cur
+  cur="$(sed -n 's/^WorkingDirectory=//p' "$svc" | head -1)"
+  [[ -n "$cur" && "$cur" != "$TARGET_DIR" ]] || return 0
+  log "------------------------------------------------------"
+  log "Service WorkingDirectory ($cur) != install dir ($TARGET_DIR) - realigning"
+  log "    (updates write to $TARGET_DIR; the app must read from there too)"
+  if [[ -d "$cur" && "$cur" != "/" && "$cur" != "$HOME_DIR" ]]; then
+    local bdir base f
+    bdir="$TARGET_DIR/.workdir-migration-$(date +%s)"
+    mkdir -p "$bdir"
+    shopt -s nullglob
+    for f in "$cur"/*.json "$cur"/cert.pem "$cur"/key.pem "$cur"/license_status.txt; do
+      base="$(basename "$f")"
+      [[ -f "$TARGET_DIR/$base" ]] && cp -a "$TARGET_DIR/$base" "$bdir/$base" 2>/dev/null || true
+      cp -a "$f" "$TARGET_DIR/$base" 2>/dev/null || true
+    done
+    shopt -u nullglob
+    log "    Migrated live state from $cur into $TARGET_DIR (replaced files saved in $bdir)"
+    log "    Left the previous data dir $cur untouched for safety"
+  fi
+  sed -i "s#^WorkingDirectory=.*#WorkingDirectory=$TARGET_DIR#" "$svc"
+  "$SYSTEMCTL_BIN" daemon-reload || true
+  log "    WorkingDirectory realigned to $TARGET_DIR"
+  echo
+}
+
 # Update Homebridge container and Govee plugin
 update_homebridge() {
   log "------------------------------------------------------"
@@ -669,6 +706,11 @@ rm -rf "/tmp/dmxsmartlink-upgrade-$$" "/tmp/dmxsmartlink-release-$$.zip" 2>/dev/
 if ! convert_to_nuitka_if_needed; then
   update_python_deps
 fi
+
+# Self-heal any WorkingDirectory drift so the update actually takes effect (no-op for
+# standard installs; migrates live state + realigns a box whose data dir was pointed
+# away from the install dir).
+realign_service_workdir
 
 # Update Homebridge
 update_homebridge
