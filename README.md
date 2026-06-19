@@ -7,7 +7,7 @@ Best tutorials for the product:
 
 ## What DMX Smart Link is
 
-DMX Smart Link is a hub that bridges **DMX software** (Art-Net / DMX universes) with **SmartLights** via Homebridge, so you can control SmartLights from your DMX controller/software.
+DMX Smart Link is software that bridges **DMX software** (Art-Net / DMX universes) with **SmartLights** via Homebridge, so you can control SmartLights from your DMX controller/software.
 
 It also includes:
 - **AI Light Show (Audio Reactive)** (new): an audio-reactive show mode inside the dashboard.
