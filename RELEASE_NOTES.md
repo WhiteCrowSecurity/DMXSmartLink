@@ -1,5 +1,19 @@
 # DMXSmartLink Release Notes
 
+## 2026.06.23 — Windows support (new!)
+
+DMX Smart Link now runs natively on **Windows 11** — no Raspberry Pi or Linux required.
+
+### Windows
+- **One-click installer.** Download `DMXSmartLink-Setup.exe` and run it — the app, the audio engine, and the Homebridge + Govee integration are all bundled. No Python, Docker, or Node.js to install.
+- **Native app window.** Launch from the Desktop / Start-Menu shortcut and the full dashboard (Visual Control, Scenes, AI Light Show, Fixture Library) opens in its own window — the same hub you use on the Pi.
+- **Reachable on your network.** The installer opens the Windows Firewall automatically, so the iPhone app and other devices can reach it at `https://<pc-ip>:5000`.
+- **AI Light Show on Windows.** The audio-reactive show reacts to whatever's playing on the PC (Windows WASAPI loopback), plus line-in.
+- **Govee without Docker.** A bundled native Homebridge + Govee integration runs alongside the app; sign in with your Govee account to control your lights.
+- **Clean uninstall.** Removing DMX Smart Link removes the app, the bundled Homebridge, the firewall rules, and all data.
+
+Download: https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest/download/DMXSmartLink-Setup.exe
+
 ## 2026.06.15
 
 ### Fixture Library

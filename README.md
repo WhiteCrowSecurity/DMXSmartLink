@@ -15,6 +15,23 @@ It also includes:
 
 ---
 
+## Install on Windows 11 (one-click) — new!
+
+On Windows, DMX Smart Link installs from a single file — no Python, Docker, or Node.js to set up. Everything (the app, the audio engine, and the Homebridge + Govee integration) is bundled in the installer.
+
+1. **Download:** https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest/download/DMXSmartLink-Setup.exe
+2. **Run it.** (Windows SmartScreen may warn it's from an unknown publisher → *More info* → *Run anyway*.) Accept the license agreement and finish the wizard — it installs the app + Homebridge, opens the firewall, and adds a **DMXSmartLink** Desktop / Start-Menu shortcut.
+3. **Launch** via the DMXSmartLink shortcut. The app opens in its own window and is reachable on your network at `https://<this-pc-ip>:5000` (use that in the iPhone app or another browser).
+4. **First run:** enter your license key to enable DMX output, and sign in to your Govee account in the Homebridge UI (`http://localhost:8581`) to control Govee lights.
+
+**Uninstall:** Settings → Apps → DMX Smart Link → Uninstall (removes the app, the bundled Homebridge, the firewall rules, and all data).
+
+---
+
+## Raspberry Pi 5 / Ubuntu (Linux)
+
+The steps below are for a Raspberry Pi 5 or Ubuntu install.
+
 ## System Requirements
 
 - Raspberry Pi 5 (recommended)
