@@ -1,0 +1,13 @@
+# The release bundle is published as a GitHub release ASSET (via `gh release`), not tracked
+# here — it duplicates the asset and the ~194 MB git blob made `git push` hang. It is built
+# locally (MCP assemble_release) and uploaded as the release download.
+dmxsmartlink.zip
+
+# The Windows installer is staged into dist_windows/ for the release-zip build AND published as
+# a standalone release asset. It exceeds GitHub's 100 MB in-repo limit — never commit it.
+dist_windows/DMXSmartLink-Setup.exe
+dist_windows/*.exe
+
+# Local scratch
+*.tmp
+__pycache__/
