@@ -8,6 +8,11 @@ dmxsmartlink.zip
 dist_windows/DMXSmartLink-Setup.exe
 dist_windows/*.exe
 
+# The macOS installer is staged into dist_macos/ for the release-zip build AND published as a
+# standalone release asset. It exceeds GitHub's 100 MB in-repo limit — never commit it.
+dist_macos/DMXSmartLink-Installer.pkg
+dist_macos/*.pkg
+
 # Local scratch
 *.tmp
 __pycache__/
