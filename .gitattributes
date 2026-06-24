@@ -3,6 +3,8 @@
 dist_*/**/*.py  -text
 dist_*/**/*.so  binary
 *.zip           binary
+# macOS installer: binary, never line-ending-converted (gitignored, but defense-in-depth).
+*.pkg binary
 
 # Shell scripts run on Linux - keep LF
 *.sh text eol=lf
