@@ -232,10 +232,13 @@ check_installation() {
 # Download and extract latest release
 download_release() {
   local TEMP_DIR="/tmp/dmxsmartlink-upgrade-$$"
-  local ZIP_PATH="/tmp/dmxsmartlink-release-$$.zip"
+  local ZIP_PATH="/tmp/dmxsmartlink-release-$$.zip"   # re-pointed to .tar.gz below for per-arch dist assets
+  local ARCHIVE_KIND="zip"
+  local ARCHIVE_BASE="/tmp/dmxsmartlink-release-$$"
+  local RELEASE_TAG=""
   local GITHUB_REPO="WhiteCrowSecurity/DMXSmartLink"
   
-  rm -rf "$TEMP_DIR" "$ZIP_PATH"
+  rm -rf "$TEMP_DIR" "$ARCHIVE_BASE".zip "$ARCHIVE_BASE".tar.gz
   mkdir -p "$TEMP_DIR"
   
   # Resolve the update channel: a 'test' box (dev only) pulls the newest GitHub
@@ -278,23 +281,42 @@ download_release() {
 
   local DOWNLOAD_URL=""
   if [[ -z "$API_ERROR" ]] && [[ -n "$REL_JSON" ]] && command -v python3 >/dev/null 2>&1; then
-    DOWNLOAD_URL="$(
-      printf '%s' "$REL_JSON" | CHANNEL="$CHANNEL" python3 -c '
+    local PARSED
+    PARSED="$(
+      printf '%s' "$REL_JSON" | CHANNEL="$CHANNEL" DIST_DIR="$DIST_DIR" python3 -c '
 import json, os, sys
 CHANNEL = os.environ.get("CHANNEL", "stable")
+DIST_DIR = os.environ.get("DIST_DIR", "")
+TARBALL = (DIST_DIR + ".tar.gz").lower() if DIST_DIR else ""
 
-def zip_from(rel):
-    for asset in (rel.get("assets") or []):
+def asset_url(rel):
+    assets = rel.get("assets") or []
+    # 1) the per-arch dist tarball (dist_pi5.tar.gz) -- smallest payload, and the only
+    #    asset the size-capped git-tree bridge cannot carry; prefer it when present.
+    if TARBALL:
+        for asset in assets:
+            url = asset.get("browser_download_url", "") or ""
+            name = (asset.get("name", "") or "").lower()
+            if name == TARBALL and url:
+                return url
+    # 2) the universal bundle zip (dmxsmartlink*.zip)
+    for asset in assets:
         url = asset.get("browser_download_url", "") or ""
         name = (asset.get("name", "") or "").lower()
         if "dmxsmartlink" in name and name.endswith(".zip") and url:
             return url
-    for asset in (rel.get("assets") or []):
+    # 3) any .zip asset
+    for asset in assets:
         url = asset.get("browser_download_url", "") or ""
         name = asset.get("name", "") or ""
         if (url.endswith(".zip") or name.endswith(".zip")) and url:
             return url
+    # 4) GitHub source zipball (last resort)
     return rel.get("zipball_url", "") or ""
+
+def emit(rel):
+    print(asset_url(rel) or "")
+    print(rel.get("tag_name", "") or "")
 
 try:
     d = json.loads(sys.stdin.read() or "{}")
@@ -302,18 +324,27 @@ try:
         # the releases list is newest-first; take the newest pre-release
         for rel in d:
             if isinstance(rel, dict) and rel.get("prerelease"):
-                print(zip_from(rel))
+                emit(rel)
                 raise SystemExit(0)
         print("")  # no pre-release -> caller falls back to stable
+        print("")
         raise SystemExit(0)
     if isinstance(d, dict) and d.get("message"):
         print("")
+        print("")
         raise SystemExit(0)
-    print(zip_from(d) if isinstance(d, dict) else "")
+    if isinstance(d, dict):
+        emit(d)
+    else:
+        print("")
+        print("")
 except Exception:
+    print("")
     print("")
 ' 2>/dev/null
     )"
+    DOWNLOAD_URL="$(printf '%s\n' "$PARSED" | sed -n '1p')"
+    RELEASE_TAG="$(printf '%s\n' "$PARSED" | sed -n '2p')"
   fi
 
   # Fallback to direct download (stable 'latest'). A test box with no pre-release
@@ -325,14 +356,28 @@ except Exception:
     DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/dmxsmartlink.zip"
   fi
   
-  log "    Downloading release..."
+  # A per-arch dist tarball (e.g. dist_pi5.tar.gz) ends in .tar.gz; the universal bundle
+  # and the GitHub source archive are .zip. Re-point ZIP_PATH and record how to extract.
+  if [[ "$DOWNLOAD_URL" == *.tar.gz ]]; then
+    ARCHIVE_KIND="tar"; ZIP_PATH="$ARCHIVE_BASE.tar.gz"
+  else
+    ARCHIVE_KIND="zip"; ZIP_PATH="$ARCHIVE_BASE.zip"
+  fi
+
+  log "    Downloading release ($ARCHIVE_KIND)..."
   if ! curl -fL "$DOWNLOAD_URL" -o "$ZIP_PATH" 2>/dev/null; then
     log "âŒ Failed to download release zip"
     rm -rf "$TEMP_DIR" "$ZIP_PATH"
     exit 1
   fi
   
-  if ! extract_zip_allowing_warnings "$ZIP_PATH" "$TEMP_DIR"; then
+  EXTRACT_OK=1
+  if [[ "$ARCHIVE_KIND" == "tar" ]]; then
+    tar -xzf "$ZIP_PATH" -C "$TEMP_DIR" 2>/dev/null || EXTRACT_OK=0
+  else
+    extract_zip_allowing_warnings "$ZIP_PATH" "$TEMP_DIR" || EXTRACT_OK=0
+  fi
+  if [[ "$EXTRACT_OK" != "1" ]]; then
     log "âŒ Failed to extract zip file"
     rm -rf "$TEMP_DIR" "$ZIP_PATH"
     exit 1
@@ -369,6 +414,12 @@ except Exception:
   log "    Source directory verified: $SRC_DIR"
   log "    Contents: $(ls -1 "$SRC_DIR" 2>/dev/null | head -10 | tr '\n' ' ' || echo 'empty')"
   
+  # Hand the resolved release tag to MAIN so it can stamp VERSION authoritatively -- the
+  # tag is the source of truth; a stale VERSION inside the payload must not win.
+  if [[ -n "$RELEASE_TAG" ]]; then
+    printf '%s' "$RELEASE_TAG" > "/tmp/dmxsmartlink-release-tag-$$" 2>/dev/null || true
+  fi
+
   echo "$SRC_DIR"
 }
 
@@ -699,8 +750,25 @@ stop_service_for_upgrade
 # Upgrade files
 upgrade_files "$SRC_DIR"
 
+# Stamp VERSION from the release tag so the in-app "current version" reflects exactly what
+# was installed -- authoritative over any stale VERSION baked into the payload. The tag is
+# DMXSmartLink-v<date>; strip the prefix, and only accept a version-looking value so the
+# moving stable "DMXSmartLink" tag never clobbers VERSION.
+RELEASE_TAG_FILE="/tmp/dmxsmartlink-release-tag-$$"
+if [[ -s "$RELEASE_TAG_FILE" ]]; then
+  TAG_RAW="$(cat "$RELEASE_TAG_FILE" 2>/dev/null | tr -d '[:space:]')"
+  TAG_VER="${TAG_RAW#DMXSmartLink-v}"
+  TAG_VER="${TAG_VER#DMXSmartLink-}"
+  TAG_VER="${TAG_VER#v}"
+  if [[ "$TAG_VER" =~ ^[0-9] ]]; then
+    printf '%s\n' "$TAG_VER" > "$TARGET_DIR/VERSION"
+    chown "$USER_NAME:$USER_NAME" "$TARGET_DIR/VERSION" 2>/dev/null || true
+    log "    Stamped VERSION from release tag: $TAG_VER"
+  fi
+fi
+
 # Cleanup temp files from download
-rm -rf "/tmp/dmxsmartlink-upgrade-$$" "/tmp/dmxsmartlink-release-$$.zip" 2>/dev/null || true
+rm -rf "/tmp/dmxsmartlink-upgrade-$$" "/tmp/dmxsmartlink-release-$$".zip "/tmp/dmxsmartlink-release-$$".tar.gz "$RELEASE_TAG_FILE" 2>/dev/null || true
 
 # Update Python dependencies (PyArmor) OR convert the service to the Nuitka binary
 if ! convert_to_nuitka_if_needed; then
