@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""DMXSmartLink launcher -- execs the Nuitka standalone binary."""
+"""DMXSmartLink launcher -- execs the Nuitka standalone binary.
+
+Plain by necessity: it carries no IP (that lives in main.dist/main.bin) and must
+run under whatever Python an existing install has, so a PyArmor install can
+self-upgrade into this Nuitka build through the rsync `Update Now` updater.
+"""
 import os
 import stat
 import sys
