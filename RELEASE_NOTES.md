@@ -21,8 +21,8 @@ Download: https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest/down
 - Added a built-in fixture library with hundreds of ready-to-use fixture profiles, browsable and searchable directly in the hub.
 - Added a fixture library page to search, filter, and add any fixture to your rig in one step.
 - Added fixture import from CSV files, supporting both comma- and tab-separated exports so profiles from common lighting tools import cleanly.
-- Added an in-app download to fetch and merge thousands of additional fixtures from the open Open Fixture Library and FreeStyler collections, skipping any already in your library.
-- Added fixture export to Open Fixture Library and FreeStyler formats, so you can back up your own profiles or share custom ones with those communities.
+- Added an in-app download to fetch and merge thousands of additional fixtures from open community fixture-library collections, skipping any already in your library.
+- Added fixture export to standard open fixture-library formats, so you can back up your own profiles or share custom ones with the community.
 - Added an option to share your custom fixture profiles with us so future releases can ship with broader fixture coverage.
 - Custom fixtures you add are now tagged separately from the built-in library, so they are easy to find and export on their own.
 
