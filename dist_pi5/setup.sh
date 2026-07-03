@@ -424,6 +424,17 @@ ensure_base_tooling() {
   else
     apt_install pipewire-bin || true
   fi
+
+  # yt-dlp from apt/distro is STALE and YouTube breaks it (nsig/SABR extraction errors), which
+  # kills the YouTube URL light-show sync. Fetch the current standalone binary to /usr/local/bin
+  # (ahead of the apt copy on PATH). Best-effort: if offline, the apt yt-dlp remains as fallback.
+  if curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp 2>/dev/null; then
+    chmod a+rx /usr/local/bin/yt-dlp 2>/dev/null || true
+    log "yt-dlp: installed current standalone binary ($(/usr/local/bin/yt-dlp --version 2>/dev/null || echo '?'))"
+  else
+    log "yt-dlp: standalone fetch failed; keeping apt yt-dlp (may be stale for YouTube)"
+  fi
+
   systemctl enable avahi-daemon || true
   systemctl restart avahi-daemon || true
   echo
@@ -707,6 +718,17 @@ Environment=PATH=${venv_path}/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 [Install]
 WantedBy=multi-user.target
 EOF
+
+  # Headless-safe audio: ensure a user PipeWire/Pulse session exists for the service user even
+  # without a graphical login. Without it pw-cat/parec/pactl have no server and the media /
+  # light-show audio pipeline is silent (confirmed on headless Ubuntu 24.04, 2026-07-03). Harmless
+  # on the Pi (its desktop session already runs PipeWire; enable --now is then a no-op).
+  loginctl enable-linger "$USER_NAME" 2>/dev/null || true
+  _pw_uid="$(id -u "$USER_NAME" 2>/dev/null || echo '')"
+  if [ -n "$_pw_uid" ]; then
+    sudo -u "$USER_NAME" XDG_RUNTIME_DIR="/run/user/$_pw_uid" \
+      systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service 2>/dev/null || true
+  fi
 
   systemctl daemon-reload
   systemctl enable dmxsmartlink.service
