@@ -152,17 +152,24 @@ copy_project() {
   # GitHub repository details
   local GITHUB_REPO="WhiteCrowSecurity/DMXSmartLink"
   local TEMP_DIR="/tmp/dmxsmartlink-src-$$"
+  local TARBALL_PATH="/tmp/dmxsmartlink-release-$$.tar.gz"
   local ZIP_PATH="/tmp/dmxsmartlink-release-$$.zip"
 
-  rm -rf "$TEMP_DIR" "$ZIP_PATH"
+  rm -rf "$TEMP_DIR" "$TARBALL_PATH" "$ZIP_PATH"
   mkdir -p "$TEMP_DIR"
 
   # ------------------------------------------------------------
-  # PRIMARY (NO-API): Always try GitHub "latest" asset download.
-  # Requires the release to have an asset named: dmxsmartlink.zip
+  # PRIMARY (NO-API): download the small PER-ARCHITECTURE tarball asset
+  # (dist_<arch>.tar.gz, ~65-70MB) instead of the combined dmxsmartlink.zip
+  # (~740MB -- bundles every platform: Pi, Ubuntu, Windows, macOS). Pulling
+  # the full combined zip just to use one arch's subfolder was unreliable on
+  # constrained Pi hardware (slow WiFi, small SD card, tight /tmp space) and
+  # caused installs to fail outright. The combined zip is kept as a fallback
+  # further down in case a specific release is ever missing the per-arch asset.
   # ------------------------------------------------------------
   local SRC_DIR=""
-  local LATEST_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/dmxsmartlink.zip"
+  local ASSET_NAME="${DIST_DIR}.tar.gz"
+  local LATEST_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/${ASSET_NAME}"
 
   # Resolve the update channel. A 'test' box (dev only) installs the newest GitHub
   # PRE-RELEASE via the API path below; the no-API 'latest' shortcut is stable-only
@@ -176,43 +183,30 @@ copy_project() {
   log "    Update channel: $CHANNEL"
 
   if [[ "$CHANNEL" == "stable" ]]; then
-    log "    Fetching latest release zip (no API): $LATEST_URL"
+    log "    Fetching latest release asset (no API): $LATEST_URL"
   else
     log "    Test channel: skipping no-API latest; will resolve newest pre-release via API"
   fi
-  if [[ "$CHANNEL" == "stable" ]] && curl -fL "$LATEST_URL" -o "$ZIP_PATH" 2>/dev/null; then
-    log "    âœ“ Downloaded latest release asset"
-    if extract_zip_allowing_warnings "$ZIP_PATH" "$TEMP_DIR"; then
-      local ROOT_DIR
-      ROOT_DIR="$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
-      if [[ -n "$ROOT_DIR" ]] && [[ -d "$ROOT_DIR/$DIST_DIR" ]]; then
-        SRC_DIR="$ROOT_DIR/$DIST_DIR"
+  if [[ "$CHANNEL" == "stable" ]] && curl -fL "$LATEST_URL" -o "$TARBALL_PATH" 2>/dev/null; then
+    log "    OK: downloaded latest release asset ($ASSET_NAME)"
+    if tar -xzf "$TARBALL_PATH" -C "$TEMP_DIR" 2>/dev/null; then
+      if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
+        SRC_DIR="$TEMP_DIR/$DIST_DIR"
         log "    Using extracted release folder: $SRC_DIR"
       else
-        # Check if dist directory exists directly in extracted location (no root subdirectory)
-        if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
-          SRC_DIR="$TEMP_DIR/$DIST_DIR"
-          log "    Using extracted release folder (direct): $SRC_DIR"
-        else
-          log "    âš  Directory $DIST_DIR not found in extracted zip"
-          log "    Available directories: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
-          if [[ -n "$ROOT_DIR" ]]; then
-            log "    Root dir contents: $(ls -1 "$ROOT_DIR" 2>/dev/null | head -10 | tr '\n' ' ')"
-          fi
-          SRC_DIR=""
-        fi
+        log "    WARNING: $DIST_DIR not found after extracting $ASSET_NAME"
+        log "    Extracted top-level entries: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
       fi
     else
-      log "    âš  Failed to extract zip file"
-      SRC_DIR=""
+      log "    WARNING: failed to extract $ASSET_NAME"
     fi
   else
-    log "    âš  Failed to download latest asset (no API). Will try API fallbackâ€¦"
+    log "    WARNING: failed to download $ASSET_NAME (no API). Will try API fallback..."
   fi
 
   # ------------------------------------------------------------
-  # FALLBACK: GitHub API (/releases/latest) to find ANY zip asset,
-  # or zipball_url if no asset found.
+  # FALLBACK 1: GitHub API (/releases/latest, or the pre-release list on the
+  # test channel) to find the same per-arch tarball asset by name.
   # ------------------------------------------------------------
   if [[ -z "${SRC_DIR:-}" ]]; then
     log "    Fetching via GitHub API fallback..."
@@ -239,26 +233,24 @@ copy_project() {
       # Use a pipe here so stdin carries JSON only; `python3 - <<'PY' <<<"$REL_JSON"`
       # makes Python treat the JSON as code, which breaks on JSON booleans like `false`.
       DOWNLOAD_URL="$(
-        printf '%s' "$REL_JSON" | CHANNEL="$CHANNEL" python3 -c '
+        printf '%s' "$REL_JSON" | CHANNEL="$CHANNEL" ASSET_NAME="$ASSET_NAME" python3 -c '
 import json, os, sys
 CHANNEL = os.environ.get("CHANNEL", "stable")
+ASSET_NAME = os.environ.get("ASSET_NAME", "")
 
-def zip_from(rel):
+def asset_from(rel):
     assets = rel.get("assets") or []
+    # 1) exact per-arch tarball match (preferred -- small, fast, arch-specific)
+    for asset in assets:
+        name = asset.get("name", "") or ""
+        url = asset.get("browser_download_url", "") or ""
+        if name == ASSET_NAME and url:
+            return url
+    # 2) legacy combined zip (older releases before per-arch tarballs existed)
     for asset in assets:
         name = (asset.get("name", "") or "").lower()
         url = asset.get("browser_download_url", "") or ""
         if name.startswith("dmxsmartlink") and name.endswith(".zip") and url:
-            return url
-    for asset in assets:
-        name = (asset.get("name", "") or "").lower()
-        url = asset.get("browser_download_url", "") or ""
-        if "dmxsmartlink" in name and name.endswith(".zip") and url:
-            return url
-    for asset in assets:
-        name = asset.get("name", "") or ""
-        url = asset.get("browser_download_url", "") or ""
-        if (name.endswith(".zip") or url.endswith(".zip")) and url:
             return url
     return rel.get("zipball_url", "") or ""
 
@@ -268,14 +260,14 @@ try:
         # the releases list is newest-first; take the newest pre-release
         for rel in d:
             if isinstance(rel, dict) and rel.get("prerelease"):
-                print(zip_from(rel))
+                print(asset_from(rel))
                 raise SystemExit(0)
         print("")  # no pre-release -> stable fallback handled by caller
         raise SystemExit(0)
     if isinstance(d, dict) and d.get("message"):
         print("")
         raise SystemExit(0)
-    print(zip_from(d) if isinstance(d, dict) else "")
+    print(asset_from(d) if isinstance(d, dict) else "")
 except Exception:
     print("")
 ' 2>/dev/null
@@ -290,51 +282,53 @@ except Exception:
     fi
 
     if [[ -n "$DOWNLOAD_URL" ]]; then
-      log "    Downloading release via API-derived URL: $DOWNLOAD_URL"
-      if curl -fL "$DOWNLOAD_URL" -o "$ZIP_PATH" 2>/dev/null; then
-        if extract_zip_allowing_warnings "$ZIP_PATH" "$TEMP_DIR"; then
+      log "    Downloading release asset via API-derived URL: $DOWNLOAD_URL"
+      if [[ "$DOWNLOAD_URL" == *.zip ]]; then
+        # Legacy combined-zip path (older release, or per-arch asset missing).
+        if curl -fL "$DOWNLOAD_URL" -o "$ZIP_PATH" 2>/dev/null && extract_zip_allowing_warnings "$ZIP_PATH" "$TEMP_DIR"; then
           local ROOT_DIR
           ROOT_DIR="$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
-          if [[ -n "$ROOT_DIR" ]] && [[ -d "$ROOT_DIR/$DIST_DIR" ]]; then
+          if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
+            SRC_DIR="$TEMP_DIR/$DIST_DIR"
+            log "    Using extracted release folder (direct): $SRC_DIR"
+          elif [[ -n "$ROOT_DIR" ]] && [[ -d "$ROOT_DIR/$DIST_DIR" ]]; then
             SRC_DIR="$ROOT_DIR/$DIST_DIR"
             log "    Using extracted release folder: $SRC_DIR"
           else
-            if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
-              SRC_DIR="$TEMP_DIR/$DIST_DIR"
-              log "    Using extracted release folder (direct): $SRC_DIR"
-            else
-              log "    âš  Directory $DIST_DIR not found in extracted zip"
-              log "    Available directories: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
-              if [[ -n "$ROOT_DIR" ]]; then
-                log "    Root dir contents: $(ls -1 "$ROOT_DIR" 2>/dev/null | head -10 | tr '\n' ' ')"
-              fi
-              SRC_DIR=""
-            fi
+            log "    WARNING: directory $DIST_DIR not found in extracted zip"
+            log "    Available directories: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
           fi
         else
-          log "    âš  Failed to extract zip file"
-          SRC_DIR=""
+          log "    WARNING: failed to download/extract zip fallback"
         fi
       else
-        log "    âš  Failed to download zip file via API-derived URL"
-        SRC_DIR=""
+        if curl -fL "$DOWNLOAD_URL" -o "$TARBALL_PATH" 2>/dev/null && tar -xzf "$TARBALL_PATH" -C "$TEMP_DIR" 2>/dev/null; then
+          if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
+            SRC_DIR="$TEMP_DIR/$DIST_DIR"
+            log "    Using extracted release folder: $SRC_DIR"
+          else
+            log "    WARNING: $DIST_DIR not found after extracting API-derived asset"
+          fi
+        else
+          log "    WARNING: failed to download/extract API-derived asset"
+        fi
       fi
     else
-      log "    âš  API fallback did not produce a download URL"
+      log "    WARNING: API fallback did not produce a download URL"
     fi
   fi
 
   # Final failure if still no source directory
   if [[ -z "${SRC_DIR:-}" ]]; then
-    log "âŒ Failed to download release zip."
+    log "ERROR: failed to download release asset."
     log "    Primary (no-API) tried:"
     log "    $LATEST_URL"
     log "    Fallback tried GitHub API:"
     log "    https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
     log "    Check: https://github.com/${GITHUB_REPO}/releases"
-    log "    Make sure the release has an asset named exactly: dmxsmartlink.zip"
-    log "    The zip should contain: dist_pi5/, dist_ubuntu_intel/, dist_ubuntu_m4/, etc."
-    rm -rf "$TEMP_DIR" "$ZIP_PATH"
+    log "    Make sure the release has an asset named exactly: $ASSET_NAME"
+    log "    (or, as a last resort, a combined dmxsmartlink.zip containing dist_pi5/, dist_ubuntu_intel/, etc.)"
+    rm -rf "$TEMP_DIR" "$TARBALL_PATH" "$ZIP_PATH"
     exit 1
   fi
 
@@ -359,7 +353,7 @@ except Exception:
   log "    âœ“ Sync complete"
 
   # Clean up temp download directory
-  rm -rf "$TEMP_DIR" "$ZIP_PATH"
+  rm -rf "$TEMP_DIR" "$TARBALL_PATH" "$ZIP_PATH"
 
   chown -R "$USER_NAME:$USER_NAME" "$TARGET_DIR"
   find "$TARGET_DIR" -type d -exec chmod 775 {} \;
