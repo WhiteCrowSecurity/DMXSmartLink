@@ -152,56 +152,69 @@ copy_project() {
   # GitHub repository details
   local GITHUB_REPO="WhiteCrowSecurity/DMXSmartLink"
   local TEMP_DIR="/tmp/dmxsmartlink-src-$$"
+  local TARBALL_PATH="/tmp/dmxsmartlink-release-$$.tar.gz"
   local ZIP_PATH="/tmp/dmxsmartlink-release-$$.zip"
 
-  rm -rf "$TEMP_DIR" "$ZIP_PATH"
+  rm -rf "$TEMP_DIR" "$TARBALL_PATH" "$ZIP_PATH"
   mkdir -p "$TEMP_DIR"
 
   # ------------------------------------------------------------
-  # PRIMARY (NO-API): Always try GitHub "latest" asset download.
-  # Requires the release to have an asset named: dmxsmartlink.zip
+  # PRIMARY (NO-API): download the small PER-ARCHITECTURE tarball asset
+  # (dist_<arch>.tar.gz, ~65-70MB) instead of the combined dmxsmartlink.zip
+  # (~740MB -- bundles every platform: Pi, Ubuntu, Windows, macOS). Pulling
+  # the full combined zip just to use one arch's subfolder was unreliable on
+  # constrained Pi hardware (slow WiFi, small SD card, tight /tmp space) and
+  # caused installs to fail outright. The combined zip is kept as a fallback
+  # further down in case a specific release is ever missing the per-arch asset.
   # ------------------------------------------------------------
   local SRC_DIR=""
-  local LATEST_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/dmxsmartlink.zip"
+  local ASSET_NAME="${DIST_DIR}.tar.gz"
+  local LATEST_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/${ASSET_NAME}"
 
-  log "    Fetching latest release zip (no API): $LATEST_URL"
-  if curl -fL "$LATEST_URL" -o "$ZIP_PATH" 2>/dev/null; then
-    log "    âœ“ Downloaded latest release asset"
-    if extract_zip_allowing_warnings "$ZIP_PATH" "$TEMP_DIR"; then
-      local ROOT_DIR
-      ROOT_DIR="$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
-      if [[ -n "$ROOT_DIR" ]] && [[ -d "$ROOT_DIR/$DIST_DIR" ]]; then
-        SRC_DIR="$ROOT_DIR/$DIST_DIR"
+  # Resolve the update channel. A 'test' box (dev only) installs the newest GitHub
+  # PRE-RELEASE via the API path below; the no-API 'latest' shortcut is stable-only
+  # (GitHub's 'latest' excludes pre-releases). Set by --test-channel / DMXSMARTLINK_CHANNEL,
+  # or an existing update_channel marker on a re-run.
+  local CHANNEL="${DMXSMARTLINK_CHANNEL:-stable}"
+  if [[ "$CHANNEL" != "test" ]] && [[ "$(cat "$TARGET_DIR/update_channel" 2>/dev/null | tr -d '[:space:]')" == "test" ]]; then
+    CHANNEL="test"
+  fi
+  [[ "$CHANNEL" == "test" ]] || CHANNEL="stable"
+  log "    Update channel: $CHANNEL"
+
+  if [[ "$CHANNEL" == "stable" ]]; then
+    log "    Fetching latest release asset (no API): $LATEST_URL"
+  else
+    log "    Test channel: skipping no-API latest; will resolve newest pre-release via API"
+  fi
+  if [[ "$CHANNEL" == "stable" ]] && curl -fL "$LATEST_URL" -o "$TARBALL_PATH" 2>/dev/null; then
+    log "    OK: downloaded latest release asset ($ASSET_NAME)"
+    if tar -xzf "$TARBALL_PATH" -C "$TEMP_DIR" 2>/dev/null; then
+      if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
+        SRC_DIR="$TEMP_DIR/$DIST_DIR"
         log "    Using extracted release folder: $SRC_DIR"
       else
-        # Check if dist directory exists directly in extracted location (no root subdirectory)
-        if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
-          SRC_DIR="$TEMP_DIR/$DIST_DIR"
-          log "    Using extracted release folder (direct): $SRC_DIR"
-        else
-          log "    âš  Directory $DIST_DIR not found in extracted zip"
-          log "    Available directories: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
-          if [[ -n "$ROOT_DIR" ]]; then
-            log "    Root dir contents: $(ls -1 "$ROOT_DIR" 2>/dev/null | head -10 | tr '\n' ' ')"
-          fi
-          SRC_DIR=""
-        fi
+        log "    WARNING: $DIST_DIR not found after extracting $ASSET_NAME"
+        log "    Extracted top-level entries: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
       fi
     else
-      log "    âš  Failed to extract zip file"
-      SRC_DIR=""
+      log "    WARNING: failed to extract $ASSET_NAME"
     fi
   else
-    log "    âš  Failed to download latest asset (no API). Will try API fallbackâ€¦"
+    log "    WARNING: failed to download $ASSET_NAME (no API). Will try API fallback..."
   fi
 
   # ------------------------------------------------------------
-  # FALLBACK: GitHub API (/releases/latest) to find ANY zip asset,
-  # or zipball_url if no asset found.
+  # FALLBACK 1: GitHub API (/releases/latest, or the pre-release list on the
+  # test channel) to find the same per-arch tarball asset by name.
   # ------------------------------------------------------------
   if [[ -z "${SRC_DIR:-}" ]]; then
     log "    Fetching via GitHub API fallback..."
     local API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+    if [[ "$CHANNEL" == "test" ]]; then
+      # the releases list (newest-first) so we can select the newest pre-release
+      API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20"
+    fi
     local REL_JSON=""
     local API_ERROR=""
 
@@ -220,90 +233,102 @@ copy_project() {
       # Use a pipe here so stdin carries JSON only; `python3 - <<'PY' <<<"$REL_JSON"`
       # makes Python treat the JSON as code, which breaks on JSON booleans like `false`.
       DOWNLOAD_URL="$(
-        printf '%s' "$REL_JSON" | python3 -c '
-import json, sys
-try:
-    d = json.loads(sys.stdin.read() or "{}")
-    if isinstance(d, dict) and d.get("message"):
-        print("")
-        raise SystemExit(0)
+        printf '%s' "$REL_JSON" | CHANNEL="$CHANNEL" ASSET_NAME="$ASSET_NAME" python3 -c '
+import json, os, sys
+CHANNEL = os.environ.get("CHANNEL", "stable")
+ASSET_NAME = os.environ.get("ASSET_NAME", "")
 
-    assets = d.get("assets") or []
-
+def asset_from(rel):
+    assets = rel.get("assets") or []
+    # 1) exact per-arch tarball match (preferred -- small, fast, arch-specific)
+    for asset in assets:
+        name = asset.get("name", "") or ""
+        url = asset.get("browser_download_url", "") or ""
+        if name == ASSET_NAME and url:
+            return url
+    # 2) legacy combined zip (older releases before per-arch tarballs existed)
     for asset in assets:
         name = (asset.get("name", "") or "").lower()
         url = asset.get("browser_download_url", "") or ""
         if name.startswith("dmxsmartlink") and name.endswith(".zip") and url:
-            print(url)
-            raise SystemExit(0)
+            return url
+    return rel.get("zipball_url", "") or ""
 
-    for asset in assets:
-        name = (asset.get("name", "") or "").lower()
-        url = asset.get("browser_download_url", "") or ""
-        if "dmxsmartlink" in name and name.endswith(".zip") and url:
-            print(url)
-            raise SystemExit(0)
-
-    for asset in assets:
-        name = asset.get("name", "") or ""
-        url = asset.get("browser_download_url", "") or ""
-        if (name.endswith(".zip") or url.endswith(".zip")) and url:
-            print(url)
-            raise SystemExit(0)
-
-    print(d.get("zipball_url", "") or "")
+try:
+    d = json.loads(sys.stdin.read() or "{}")
+    if CHANNEL == "test" and isinstance(d, list):
+        # the releases list is newest-first; take the newest pre-release
+        for rel in d:
+            if isinstance(rel, dict) and rel.get("prerelease"):
+                print(asset_from(rel))
+                raise SystemExit(0)
+        print("")  # no pre-release -> stable fallback handled by caller
+        raise SystemExit(0)
+    if isinstance(d, dict) and d.get("message"):
+        print("")
+        raise SystemExit(0)
+    print(asset_from(d) if isinstance(d, dict) else "")
 except Exception:
     print("")
 ' 2>/dev/null
       )"
+
+    # Test channel with no pre-release available: never leave the box without a
+    # source -- fall back to the stable 'latest' asset.
+    if [[ -z "$DOWNLOAD_URL" ]] && [[ "$CHANNEL" == "test" ]]; then
+      log "    No pre-release found; falling back to stable latest."
+      DOWNLOAD_URL="$LATEST_URL"
+    fi
     fi
 
     if [[ -n "$DOWNLOAD_URL" ]]; then
-      log "    Downloading release via API-derived URL: $DOWNLOAD_URL"
-      if curl -fL "$DOWNLOAD_URL" -o "$ZIP_PATH" 2>/dev/null; then
-        if extract_zip_allowing_warnings "$ZIP_PATH" "$TEMP_DIR"; then
+      log "    Downloading release asset via API-derived URL: $DOWNLOAD_URL"
+      if [[ "$DOWNLOAD_URL" == *.zip ]]; then
+        # Legacy combined-zip path (older release, or per-arch asset missing).
+        if curl -fL "$DOWNLOAD_URL" -o "$ZIP_PATH" 2>/dev/null && extract_zip_allowing_warnings "$ZIP_PATH" "$TEMP_DIR"; then
           local ROOT_DIR
           ROOT_DIR="$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
-          if [[ -n "$ROOT_DIR" ]] && [[ -d "$ROOT_DIR/$DIST_DIR" ]]; then
+          if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
+            SRC_DIR="$TEMP_DIR/$DIST_DIR"
+            log "    Using extracted release folder (direct): $SRC_DIR"
+          elif [[ -n "$ROOT_DIR" ]] && [[ -d "$ROOT_DIR/$DIST_DIR" ]]; then
             SRC_DIR="$ROOT_DIR/$DIST_DIR"
             log "    Using extracted release folder: $SRC_DIR"
           else
-            if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
-              SRC_DIR="$TEMP_DIR/$DIST_DIR"
-              log "    Using extracted release folder (direct): $SRC_DIR"
-            else
-              log "    âš  Directory $DIST_DIR not found in extracted zip"
-              log "    Available directories: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
-              if [[ -n "$ROOT_DIR" ]]; then
-                log "    Root dir contents: $(ls -1 "$ROOT_DIR" 2>/dev/null | head -10 | tr '\n' ' ')"
-              fi
-              SRC_DIR=""
-            fi
+            log "    WARNING: directory $DIST_DIR not found in extracted zip"
+            log "    Available directories: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
           fi
         else
-          log "    âš  Failed to extract zip file"
-          SRC_DIR=""
+          log "    WARNING: failed to download/extract zip fallback"
         fi
       else
-        log "    âš  Failed to download zip file via API-derived URL"
-        SRC_DIR=""
+        if curl -fL "$DOWNLOAD_URL" -o "$TARBALL_PATH" 2>/dev/null && tar -xzf "$TARBALL_PATH" -C "$TEMP_DIR" 2>/dev/null; then
+          if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
+            SRC_DIR="$TEMP_DIR/$DIST_DIR"
+            log "    Using extracted release folder: $SRC_DIR"
+          else
+            log "    WARNING: $DIST_DIR not found after extracting API-derived asset"
+          fi
+        else
+          log "    WARNING: failed to download/extract API-derived asset"
+        fi
       fi
     else
-      log "    âš  API fallback did not produce a download URL"
+      log "    WARNING: API fallback did not produce a download URL"
     fi
   fi
 
   # Final failure if still no source directory
   if [[ -z "${SRC_DIR:-}" ]]; then
-    log "âŒ Failed to download release zip."
+    log "ERROR: failed to download release asset."
     log "    Primary (no-API) tried:"
     log "    $LATEST_URL"
     log "    Fallback tried GitHub API:"
     log "    https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
     log "    Check: https://github.com/${GITHUB_REPO}/releases"
-    log "    Make sure the release has an asset named exactly: dmxsmartlink.zip"
-    log "    The zip should contain: dist_pi5/, dist_ubuntu_intel/, dist_ubuntu_m4/, etc."
-    rm -rf "$TEMP_DIR" "$ZIP_PATH"
+    log "    Make sure the release has an asset named exactly: $ASSET_NAME"
+    log "    (or, as a last resort, a combined dmxsmartlink.zip containing dist_pi5/, dist_ubuntu_intel/, etc.)"
+    rm -rf "$TEMP_DIR" "$TARBALL_PATH" "$ZIP_PATH"
     exit 1
   fi
 
@@ -322,17 +347,29 @@ except Exception:
     --exclude="config.json" \
     --exclude="devices.json" \
     --exclude="groups.json" \
+    --exclude="dev_mode" \
+    --exclude="update_channel" \
     "$SRC_DIR/" "$TARGET_DIR/"
   log "    âœ“ Sync complete"
 
   # Clean up temp download directory
-  rm -rf "$TEMP_DIR" "$ZIP_PATH"
+  rm -rf "$TEMP_DIR" "$TARBALL_PATH" "$ZIP_PATH"
 
   chown -R "$USER_NAME:$USER_NAME" "$TARGET_DIR"
   find "$TARGET_DIR" -type d -exec chmod 775 {} \;
   find "$TARGET_DIR" -type f -exec chmod 664 {} \;
   # Ensure .so files are executable (required for PyArmor runtime)
   find "$TARGET_DIR" -name "*.so" -exec chmod 755 {} \;
+
+  # On the test channel, leave the box dev-enabled + pinned to test so future
+  # Update Now runs keep pulling pre-releases. Both markers are cwd-relative user
+  # data (rsync-excluded above), so they persist across upgrades.
+  if [[ "$CHANNEL" == "test" ]]; then
+    printf 'test\n' > "$TARGET_DIR/update_channel"
+    : > "$TARGET_DIR/dev_mode"
+    chown "$USER_NAME:$USER_NAME" "$TARGET_DIR/update_channel" "$TARGET_DIR/dev_mode"
+    log "    Test channel: wrote dev_mode + update_channel=test"
+  fi
 
   echo
 }
@@ -381,6 +418,17 @@ ensure_base_tooling() {
   else
     apt_install pipewire-bin || true
   fi
+
+  # yt-dlp from apt/distro is STALE and YouTube breaks it (nsig/SABR extraction errors), which
+  # kills the YouTube URL light-show sync. Fetch the current standalone binary to /usr/local/bin
+  # (ahead of the apt copy on PATH). Best-effort: if offline, the apt yt-dlp remains as fallback.
+  if curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp 2>/dev/null; then
+    chmod a+rx /usr/local/bin/yt-dlp 2>/dev/null || true
+    log "yt-dlp: installed current standalone binary ($(/usr/local/bin/yt-dlp --version 2>/dev/null || echo '?'))"
+  else
+    log "yt-dlp: standalone fetch failed; keeping apt yt-dlp (may be stale for YouTube)"
+  fi
+
   systemctl enable avahi-daemon || true
   systemctl restart avahi-daemon || true
   echo
@@ -430,6 +478,12 @@ ensure_python() {
 
 create_venv_and_install() {
   log "------------------------------------------------------"
+  if [[ -f "$TARGET_DIR/main.dist/main.bin" ]]; then
+    log "STEP 6: Nuitka standalone build detected â€” skipping app venv (binary is self-contained)."
+    chmod 755 "$TARGET_DIR/main.dist/main.bin" 2>/dev/null || true
+    echo
+    return 0
+  fi
   log "STEP 6: Creating venv on Python 3.x and installing depsâ€¦"
   log "    Using interpreter: $("$PYTHON_BIN" -V)"
   sudo -u "$USER_NAME" bash -lc "
@@ -599,27 +653,41 @@ install_govee_plugin() {
     bash -lc "apt-get update -yq && apt-get install -yq --no-install-recommends git curl bluetooth bluez libbluetooth-dev libudev-dev pi-bluetooth || true"
 
   # Install the plugin (BEST-EFFORT). The DMXSmartLink dashboard does NOT require the
-  # Govee plugin to run, so a plugin/npm hiccup (e.g. a transient ENOTEMPTY) must never
-  # abort the whole install -- otherwise the dmxsmartlink service below never gets created.
-  if docker exec homebridge sh -lc "if command -v hb-service >/dev/null 2>&1; then hb-service --docker add '$GOVEE_PLUGIN'; elif command -v npm >/dev/null 2>&1; then cd /homebridge && npm install --save --force '$GOVEE_REPO'; else echo 'Neither hb-service nor npm is available in the Homebridge container.' >&2; exit 127; fi"; then
+  # Govee plugin to run, so a plugin/npm hiccup must never abort the whole install --
+  # otherwise the dmxsmartlink service below never gets created. The Homebridge image's
+  # bundled @matter/node trips npm ENOTEMPTY on a plain install, so use --legacy-peer-deps
+  # and, on failure, a clean retry (drop the conflicting @matter + npm cache). Report
+  # HONESTLY -- only claim success when the package is actually present.
+  _govee_present() { docker exec homebridge sh -lc "test -f /var/lib/homebridge/node_modules/@homebridge-plugins/homebridge-govee/package.json"; }
+  docker exec homebridge sh -lc "cd /var/lib/homebridge && npm install --save --no-audit --no-fund --legacy-peer-deps '$GOVEE_PLUGIN'" >/dev/null 2>&1 || true
+  if ! _govee_present; then
+    log "    First attempt failed (npm conflict); clean retry..."
+    docker exec -u root homebridge sh -lc "cd /var/lib/homebridge && rm -rf node_modules/@matter node_modules/@homebridge-plugins/homebridge-govee 2>/dev/null; npm cache clean --force >/dev/null 2>&1; npm install --save --no-audit --no-fund --legacy-peer-deps '$GOVEE_PLUGIN'" >/dev/null 2>&1 || true
+  fi
+  if _govee_present; then
     # Give node cap_net_raw so noble can open HCI sockets if needed
     docker exec -u root homebridge bash -lc 'setcap cap_net_raw+eip "$(eval readlink -f "$(which node)")" || true' || true
-    if docker exec homebridge sh -lc "test -f /homebridge/node_modules/@homebridge-plugins/homebridge-govee/package.json"; then
-      log "    Govee plugin installed."
-    else
-      log "    WARNING: Govee plugin reported installed but package not found; continuing."
-    fi
+    log "    ✓ Govee plugin installed."
   else
-    log "    WARNING: Govee plugin install failed (non-fatal). The dashboard will still run; install the Govee plugin later from the Homebridge UI."
+    log "    ⚠ Govee plugin install FAILED (non-fatal) — dashboard still runs; add it later from the Homebridge UI (Plugins → search 'Govee')."
   fi
   docker restart homebridge >/dev/null 2>&1 || true
-  log "    â†’ Latest official Govee plugin installed, BLE deps present, and Homebridge restarted."
   echo
 }
 
 write_service() {
-  local entry_abs="/home/$USER_NAME/dmxsmartlink/main.py"
   local workdir="/home/$USER_NAME/dmxsmartlink"
+  local exec_start venv_path
+
+  if [[ -f "$workdir/main.dist/main.bin" ]]; then
+    # Nuitka standalone build â€” run the self-contained binary directly (no venv).
+    exec_start="$workdir/main.dist/main.bin"
+    venv_path=""
+  else
+    # PyArmor build â€” run the obfuscated app under the venv interpreter.
+    exec_start="$workdir/.venv/bin/python $workdir/main.py"
+    venv_path="$workdir/.venv/bin:"
+  fi
 
   log "------------------------------------------------------"
   log "STEP 11: Creating systemd service at $SERVICE_FILE..."
@@ -633,17 +701,28 @@ Requires=docker.service
 User=$USER_NAME
 WorkingDirectory=$workdir
 ExecStartPre=/usr/bin/docker pull homebridge/homebridge
-ExecStart=/home/$USER_NAME/dmxsmartlink/.venv/bin/python $entry_abs
+ExecStart=$exec_start
 Restart=always
 RestartSec=5
 UMask=0002
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=$workdir
-Environment=PATH=/home/$USER_NAME/dmxsmartlink/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+Environment=PATH=${venv_path}/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 
 [Install]
 WantedBy=multi-user.target
 EOF
+
+  # Headless-safe audio: ensure a user PipeWire/Pulse session exists for the service user even
+  # without a graphical login. Without it pw-cat/parec/pactl have no server and the media /
+  # light-show audio pipeline is silent (confirmed on headless Ubuntu 24.04, 2026-07-03). Harmless
+  # on the Pi (its desktop session already runs PipeWire; enable --now is then a no-op).
+  loginctl enable-linger "$USER_NAME" 2>/dev/null || true
+  _pw_uid="$(id -u "$USER_NAME" 2>/dev/null || echo '')"
+  if [ -n "$_pw_uid" ]; then
+    sudo -u "$USER_NAME" XDG_RUNTIME_DIR="/run/user/$_pw_uid" \
+      systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service 2>/dev/null || true
+  fi
 
   systemctl daemon-reload
   systemctl enable dmxsmartlink.service
@@ -697,6 +776,35 @@ EOF
 
 # ========================== MAIN ==========================
 log "âœ… STEP 1: Detected script directory: $SCRIPT_DIR (user = $USER_NAME)"
+
+# Prerequisites-only mode: install just the runtime OS packages a fresh install
+# would (base tooling + host Bluetooth/BLE), then exit. The Nuitka-conversion
+# updater (upgrade_pi5.sh) invokes this so an old client picks up prerequisites
+# its original install never had: the standalone binary bundles Python but still
+# needs the system audio (portaudio/pipewire/ffmpeg) and BLE (bluez) packages at
+# runtime. Idempotent (apt no-ops when already present); must run as root for apt.
+if [[ "${1:-}" == "--prereqs-only" ]]; then
+  if [[ "$(id -u)" -ne 0 ]]; then
+    log "ERROR: --prereqs-only must run as root (apt installs)."
+    exit 1
+  fi
+  log "Prerequisites-only mode: installing runtime OS prerequisites..."
+  ensure_base_tooling
+  install_ble_support_host
+  log "Prerequisites installed."
+  exit 0
+fi
+
+# --test-channel (dev only): install from the newest GitHub PRE-RELEASE instead of the
+# public 'latest', and leave the box dev-enabled + pinned to the test channel (copy_project
+# reads DMXSMARTLINK_CHANNEL and writes the markers). Scanned across all args so it can sit
+# anywhere; equivalent to exporting DMXSMARTLINK_CHANNEL=test.
+for _arg in "$@"; do
+  if [[ "$_arg" == "--test-channel" ]]; then
+    export DMXSMARTLINK_CHANNEL="test"
+    log "Test channel selected: installing the newest pre-release (dev mode)."
+  fi
+done
 
 # Install git early if needed (for downloading from GitHub)
 if ! command -v git >/dev/null 2>&1; then
