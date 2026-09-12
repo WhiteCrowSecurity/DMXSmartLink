@@ -152,17 +152,24 @@ copy_project() {
   # GitHub repository details
   local GITHUB_REPO="WhiteCrowSecurity/DMXSmartLink"
   local TEMP_DIR="/tmp/dmxsmartlink-src-$$"
+  local TARBALL_PATH="/tmp/dmxsmartlink-release-$$.tar.gz"
   local ZIP_PATH="/tmp/dmxsmartlink-release-$$.zip"
 
-  rm -rf "$TEMP_DIR" "$ZIP_PATH"
+  rm -rf "$TEMP_DIR" "$TARBALL_PATH" "$ZIP_PATH"
   mkdir -p "$TEMP_DIR"
 
   # ------------------------------------------------------------
-  # PRIMARY (NO-API): Always try GitHub "latest" asset download.
-  # Requires the release to have an asset named: dmxsmartlink.zip
+  # PRIMARY (NO-API): download the small PER-ARCHITECTURE tarball asset
+  # (dist_<arch>.tar.gz, ~65-70MB) instead of the combined dmxsmartlink.zip
+  # (~740MB -- bundles every platform: Pi, Ubuntu, Windows, macOS). Pulling
+  # the full combined zip just to use one arch's subfolder was unreliable on
+  # constrained Pi hardware (slow WiFi, small SD card, tight /tmp space) and
+  # caused installs to fail outright. The combined zip is kept as a fallback
+  # further down in case a specific release is ever missing the per-arch asset.
   # ------------------------------------------------------------
   local SRC_DIR=""
-  local LATEST_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/dmxsmartlink.zip"
+  local ASSET_NAME="${DIST_DIR}.tar.gz"
+  local LATEST_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/${ASSET_NAME}"
 
   # Resolve the update channel. A 'test' box (dev only) installs the newest GitHub
   # PRE-RELEASE via the API path below; the no-API 'latest' shortcut is stable-only
@@ -176,43 +183,30 @@ copy_project() {
   log "    Update channel: $CHANNEL"
 
   if [[ "$CHANNEL" == "stable" ]]; then
-    log "    Fetching latest release zip (no API): $LATEST_URL"
+    log "    Fetching latest release asset (no API): $LATEST_URL"
   else
     log "    Test channel: skipping no-API latest; will resolve newest pre-release via API"
   fi
-  if [[ "$CHANNEL" == "stable" ]] && curl -fL "$LATEST_URL" -o "$ZIP_PATH" 2>/dev/null; then
-    log "    âœ“ Downloaded latest release asset"
-    if extract_zip_allowing_warnings "$ZIP_PATH" "$TEMP_DIR"; then
-      local ROOT_DIR
-      ROOT_DIR="$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
-      if [[ -n "$ROOT_DIR" ]] && [[ -d "$ROOT_DIR/$DIST_DIR" ]]; then
-        SRC_DIR="$ROOT_DIR/$DIST_DIR"
+  if [[ "$CHANNEL" == "stable" ]] && curl -fL "$LATEST_URL" -o "$TARBALL_PATH" 2>/dev/null; then
+    log "    OK: downloaded latest release asset ($ASSET_NAME)"
+    if tar -xzf "$TARBALL_PATH" -C "$TEMP_DIR" 2>/dev/null; then
+      if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
+        SRC_DIR="$TEMP_DIR/$DIST_DIR"
         log "    Using extracted release folder: $SRC_DIR"
       else
-        # Check if dist directory exists directly in extracted location (no root subdirectory)
-        if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
-          SRC_DIR="$TEMP_DIR/$DIST_DIR"
-          log "    Using extracted release folder (direct): $SRC_DIR"
-        else
-          log "    âš  Directory $DIST_DIR not found in extracted zip"
-          log "    Available directories: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
-          if [[ -n "$ROOT_DIR" ]]; then
-            log "    Root dir contents: $(ls -1 "$ROOT_DIR" 2>/dev/null | head -10 | tr '\n' ' ')"
-          fi
-          SRC_DIR=""
-        fi
+        log "    WARNING: $DIST_DIR not found after extracting $ASSET_NAME"
+        log "    Extracted top-level entries: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
       fi
     else
-      log "    âš  Failed to extract zip file"
-      SRC_DIR=""
+      log "    WARNING: failed to extract $ASSET_NAME"
     fi
   else
-    log "    âš  Failed to download latest asset (no API). Will try API fallbackâ€¦"
+    log "    WARNING: failed to download $ASSET_NAME (no API). Will try API fallback..."
   fi
 
   # ------------------------------------------------------------
-  # FALLBACK: GitHub API (/releases/latest) to find ANY zip asset,
-  # or zipball_url if no asset found.
+  # FALLBACK 1: GitHub API (/releases/latest, or the pre-release list on the
+  # test channel) to find the same per-arch tarball asset by name.
   # ------------------------------------------------------------
   if [[ -z "${SRC_DIR:-}" ]]; then
     log "    Fetching via GitHub API fallback..."
@@ -239,26 +233,24 @@ copy_project() {
       # Use a pipe here so stdin carries JSON only; `python3 - <<'PY' <<<"$REL_JSON"`
       # makes Python treat the JSON as code, which breaks on JSON booleans like `false`.
       DOWNLOAD_URL="$(
-        printf '%s' "$REL_JSON" | CHANNEL="$CHANNEL" python3 -c '
+        printf '%s' "$REL_JSON" | CHANNEL="$CHANNEL" ASSET_NAME="$ASSET_NAME" python3 -c '
 import json, os, sys
 CHANNEL = os.environ.get("CHANNEL", "stable")
+ASSET_NAME = os.environ.get("ASSET_NAME", "")
 
-def zip_from(rel):
+def asset_from(rel):
     assets = rel.get("assets") or []
+    # 1) exact per-arch tarball match (preferred -- small, fast, arch-specific)
+    for asset in assets:
+        name = asset.get("name", "") or ""
+        url = asset.get("browser_download_url", "") or ""
+        if name == ASSET_NAME and url:
+            return url
+    # 2) legacy combined zip (older releases before per-arch tarballs existed)
     for asset in assets:
         name = (asset.get("name", "") or "").lower()
         url = asset.get("browser_download_url", "") or ""
         if name.startswith("dmxsmartlink") and name.endswith(".zip") and url:
-            return url
-    for asset in assets:
-        name = (asset.get("name", "") or "").lower()
-        url = asset.get("browser_download_url", "") or ""
-        if "dmxsmartlink" in name and name.endswith(".zip") and url:
-            return url
-    for asset in assets:
-        name = asset.get("name", "") or ""
-        url = asset.get("browser_download_url", "") or ""
-        if (name.endswith(".zip") or url.endswith(".zip")) and url:
             return url
     return rel.get("zipball_url", "") or ""
 
@@ -268,14 +260,14 @@ try:
         # the releases list is newest-first; take the newest pre-release
         for rel in d:
             if isinstance(rel, dict) and rel.get("prerelease"):
-                print(zip_from(rel))
+                print(asset_from(rel))
                 raise SystemExit(0)
         print("")  # no pre-release -> stable fallback handled by caller
         raise SystemExit(0)
     if isinstance(d, dict) and d.get("message"):
         print("")
         raise SystemExit(0)
-    print(zip_from(d) if isinstance(d, dict) else "")
+    print(asset_from(d) if isinstance(d, dict) else "")
 except Exception:
     print("")
 ' 2>/dev/null
@@ -290,51 +282,53 @@ except Exception:
     fi
 
     if [[ -n "$DOWNLOAD_URL" ]]; then
-      log "    Downloading release via API-derived URL: $DOWNLOAD_URL"
-      if curl -fL "$DOWNLOAD_URL" -o "$ZIP_PATH" 2>/dev/null; then
-        if extract_zip_allowing_warnings "$ZIP_PATH" "$TEMP_DIR"; then
+      log "    Downloading release asset via API-derived URL: $DOWNLOAD_URL"
+      if [[ "$DOWNLOAD_URL" == *.zip ]]; then
+        # Legacy combined-zip path (older release, or per-arch asset missing).
+        if curl -fL "$DOWNLOAD_URL" -o "$ZIP_PATH" 2>/dev/null && extract_zip_allowing_warnings "$ZIP_PATH" "$TEMP_DIR"; then
           local ROOT_DIR
           ROOT_DIR="$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)"
-          if [[ -n "$ROOT_DIR" ]] && [[ -d "$ROOT_DIR/$DIST_DIR" ]]; then
+          if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
+            SRC_DIR="$TEMP_DIR/$DIST_DIR"
+            log "    Using extracted release folder (direct): $SRC_DIR"
+          elif [[ -n "$ROOT_DIR" ]] && [[ -d "$ROOT_DIR/$DIST_DIR" ]]; then
             SRC_DIR="$ROOT_DIR/$DIST_DIR"
             log "    Using extracted release folder: $SRC_DIR"
           else
-            if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
-              SRC_DIR="$TEMP_DIR/$DIST_DIR"
-              log "    Using extracted release folder (direct): $SRC_DIR"
-            else
-              log "    âš  Directory $DIST_DIR not found in extracted zip"
-              log "    Available directories: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
-              if [[ -n "$ROOT_DIR" ]]; then
-                log "    Root dir contents: $(ls -1 "$ROOT_DIR" 2>/dev/null | head -10 | tr '\n' ' ')"
-              fi
-              SRC_DIR=""
-            fi
+            log "    WARNING: directory $DIST_DIR not found in extracted zip"
+            log "    Available directories: $(ls -1 "$TEMP_DIR" 2>/dev/null | head -5 | tr '\n' ' ')"
           fi
         else
-          log "    âš  Failed to extract zip file"
-          SRC_DIR=""
+          log "    WARNING: failed to download/extract zip fallback"
         fi
       else
-        log "    âš  Failed to download zip file via API-derived URL"
-        SRC_DIR=""
+        if curl -fL "$DOWNLOAD_URL" -o "$TARBALL_PATH" 2>/dev/null && tar -xzf "$TARBALL_PATH" -C "$TEMP_DIR" 2>/dev/null; then
+          if [[ -d "$TEMP_DIR/$DIST_DIR" ]]; then
+            SRC_DIR="$TEMP_DIR/$DIST_DIR"
+            log "    Using extracted release folder: $SRC_DIR"
+          else
+            log "    WARNING: $DIST_DIR not found after extracting API-derived asset"
+          fi
+        else
+          log "    WARNING: failed to download/extract API-derived asset"
+        fi
       fi
     else
-      log "    âš  API fallback did not produce a download URL"
+      log "    WARNING: API fallback did not produce a download URL"
     fi
   fi
 
   # Final failure if still no source directory
   if [[ -z "${SRC_DIR:-}" ]]; then
-    log "âŒ Failed to download release zip."
+    log "ERROR: failed to download release asset."
     log "    Primary (no-API) tried:"
     log "    $LATEST_URL"
     log "    Fallback tried GitHub API:"
     log "    https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
     log "    Check: https://github.com/${GITHUB_REPO}/releases"
-    log "    Make sure the release has an asset named exactly: dmxsmartlink.zip"
-    log "    The zip should contain: dist_pi5/, dist_ubuntu_intel/, dist_ubuntu_m4/, etc."
-    rm -rf "$TEMP_DIR" "$ZIP_PATH"
+    log "    Make sure the release has an asset named exactly: $ASSET_NAME"
+    log "    (or, as a last resort, a combined dmxsmartlink.zip containing dist_pi5/, dist_ubuntu_intel/, etc.)"
+    rm -rf "$TEMP_DIR" "$TARBALL_PATH" "$ZIP_PATH"
     exit 1
   fi
 
@@ -359,7 +353,7 @@ except Exception:
   log "    âœ“ Sync complete"
 
   # Clean up temp download directory
-  rm -rf "$TEMP_DIR" "$ZIP_PATH"
+  rm -rf "$TEMP_DIR" "$TARBALL_PATH" "$ZIP_PATH"
 
   chown -R "$USER_NAME:$USER_NAME" "$TARGET_DIR"
   find "$TARGET_DIR" -type d -exec chmod 775 {} \;
@@ -424,6 +418,17 @@ ensure_base_tooling() {
   else
     apt_install pipewire-bin || true
   fi
+
+  # yt-dlp from apt/distro is STALE and YouTube breaks it (nsig/SABR extraction errors), which
+  # kills the YouTube URL light-show sync. Fetch the current standalone binary to /usr/local/bin
+  # (ahead of the apt copy on PATH). Best-effort: if offline, the apt yt-dlp remains as fallback.
+  if curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp 2>/dev/null; then
+    chmod a+rx /usr/local/bin/yt-dlp 2>/dev/null || true
+    log "yt-dlp: installed current standalone binary ($(/usr/local/bin/yt-dlp --version 2>/dev/null || echo '?'))"
+  else
+    log "yt-dlp: standalone fetch failed; keeping apt yt-dlp (may be stale for YouTube)"
+  fi
+
   systemctl enable avahi-daemon || true
   systemctl restart avahi-daemon || true
   echo
@@ -438,6 +443,29 @@ install_ble_support_host() {
   apt_update
   apt_install bluetooth bluez libbluetooth-dev libudev-dev expect || true
   apt_install pi-bluetooth || true
+
+  # Stream Deck (USB HID) support: hidapi-libusb backend + udev access for the service user.
+  # (libhidapi-hidraw0 may coexist; the library only loads libhidapi-libusb.so.0. Never apt-remove it:
+  #  apt would drag its reverse-dependencies out with it.)
+  apt_install libhidapi-libusb0 libusb-1.0-0 || true
+  cat > /etc/udev/rules.d/10-streamdeck.rules <<'EOF_SD'
+# Elgato Stream Deck
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0fd9", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+# Mirabox StreamDock family (YoloLiv YoloDeck = 6603:1005), Ajazz (0300)
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="6603", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="6602", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="5548", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="5500", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0300", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+# their keyboard interface (event node) — the hub grabs it so presses don't type
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="6603", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="6602", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="5548", MODE="0660", GROUP="plugdev"
+EOF_SD
+  getent group plugdev >/dev/null 2>&1 || groupadd plugdev || true
+  usermod -aG plugdev "$USER_NAME" 2>/dev/null || true
+  udevadm control --reload-rules 2>/dev/null || true
+  udevadm trigger 2>/dev/null || true
 
   systemctl enable bluetooth || true
   systemctl restart bluetooth || true
@@ -488,7 +516,7 @@ create_venv_and_install() {
     '$PYTHON_BIN' -m venv .venv
     source .venv/bin/activate
     pip install -U pip
-    pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial psutil numpy sounddevice
+    pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial psutil numpy sounddevice streamdeck Pillow
     # aubio is optional. It is known to fail building on Python 3.13+ due to upstream C/Numpy API changes.
     PYVER=\$('\"$PYTHON_BIN\"' -c 'import sys; print(sys.version_info[0]*100 + sys.version_info[1])' 2>/dev/null || echo 0)
     if [ \"\$PYVER\" -ge 313 ]; then
@@ -567,6 +595,154 @@ start_homebridge() {
   log "    â†’ Homebridge container started."
   log "    â†’ Visit http://<your-pi-or-ubuntu-ip>:8581 to finish Homebridge setup."
   echo
+}
+
+# ---- Home Assistant + Matter Server (companion containers) -----------------------------------
+# Same footing as Homebridge: Docker containers on host networking, data under the user's home.
+# Idempotent: creates what is missing, refreshes what exists (pull + recreate with the same
+# arguments). Skipped, with a clear message, when Docker is absent or the disk is nearly full
+# (the Home Assistant image is ~2.3 GB). The hub onboards Home Assistant itself on first start
+# (homeassistant_setup.py): admin account, API token, local Govee + Matter integrations.
+HA_IMAGE="ghcr.io/home-assistant/home-assistant:stable"
+MATTER_IMAGE="ghcr.io/home-assistant-libs/python-matter-server:stable"
+HA_MIN_FREE_MB=4500
+
+_ha_free_mb() { df -Pm "$1" 2>/dev/null | awk 'NR==2{print $4}'; }
+
+ensure_home_assistant() {
+  log "------------------------------------------------------"
+  log "Home Assistant + Matter Server containers..."
+  if ! command -v docker >/dev/null 2>&1; then
+    log "    ⚠ Docker not found; skipping Home Assistant"
+    return 0
+  fi
+  local ha_dir="${HA_CONFIG_DIR:-/home/$USER_NAME/homeassistant-config}"
+  local matter_dir="${MATTER_DATA_DIR:-/home/$USER_NAME/matter-data}"
+  mkdir -p "$ha_dir" "$matter_dir"
+  chown "$USER_NAME:$USER_NAME" "$ha_dir" "$matter_dir" 2>/dev/null || true
+  local have_ha=0 have_matter=0
+  docker ps -a --format '{{.Names}}' | grep -qx homeassistant && have_ha=1
+  docker ps -a --format '{{.Names}}' | grep -qx matter-server && have_matter=1
+  local free_mb
+  free_mb="$(_ha_free_mb /var/lib/docker 2>/dev/null || _ha_free_mb /)"
+  if [[ $have_ha -eq 0 ]] && [[ -n "$free_mb" ]] && (( free_mb < HA_MIN_FREE_MB )); then
+    log "    ⚠ Only ${free_mb} MB free; Home Assistant needs ~${HA_MIN_FREE_MB} MB. Skipping (free space and re-run the update)."
+    return 0
+  fi
+  local tz
+  tz="$(cat /etc/timezone 2>/dev/null || timedatectl show -p Timezone --value 2>/dev/null || echo UTC)"
+  local dbus_dir dbus_vol=""
+  dbus_dir="$( [[ -S /run/dbus/system_bus_socket ]] && echo /run/dbus || ( [[ -S /var/run/dbus/system_bus_socket ]] && echo /var/run/dbus ) || true )"
+  [[ -n "$dbus_dir" ]] && dbus_vol="-v ${dbus_dir}:/run/dbus:ro"
+
+  # The images are large (Home Assistant ~2.3 GB). When they are not on the box yet, pull and
+  # start them in the BACKGROUND so the update itself finishes promptly; the hub's setup thread
+  # waits for the container and onboards Home Assistant once it answers.
+  # A fixed /tmp path can be unwritable for root when another user created it (fs.protected_regular),
+  # so use a fresh temp file and keep the log with the hub's logs; never let this step abort the update.
+  rm -f /tmp/dmxsl_ha_containers.sh 2>/dev/null || true
+  local runner
+  runner="$(mktemp /tmp/dmxsl_ha_containers.XXXXXX 2>/dev/null || echo /tmp/dmxsl_ha_containers.$$.sh)"
+  local runner_log="/home/$USER_NAME/dmxsmartlink/logs/ha_containers.log"
+  mkdir -p "$(dirname "$runner_log")" 2>/dev/null || true
+  if ! cat > "$runner" <<EOF_HA
+#!/bin/bash
+docker pull "$HA_IMAGE" >/dev/null 2>&1 || true
+docker rm -f homeassistant >/dev/null 2>&1 || true
+docker run -d --name homeassistant --restart=unless-stopped --network host --privileged \
+  -e TZ="$tz" -v "$ha_dir":/config "$HA_IMAGE" >/dev/null 2>&1
+docker pull "$MATTER_IMAGE" >/dev/null 2>&1 || true
+docker rm -f matter-server >/dev/null 2>&1 || true
+docker run -d --name matter-server --restart=unless-stopped --network host \
+  --security-opt apparmor=unconfined $dbus_vol -v "$matter_dir":/data \
+  "$MATTER_IMAGE" --storage-path /data --log-level info >/dev/null 2>&1
+EOF_HA
+  then
+    log "    ⚠ Could not write the Home Assistant container script ($runner); skipping Home Assistant this time"
+    return 0
+  fi
+  chmod +x "$runner"
+  if docker image inspect "$HA_IMAGE" >/dev/null 2>&1; then
+    if bash "$runner"; then
+      log "    ✓ Home Assistant + Matter Server containers $( [[ $have_ha -eq 1 ]] && echo refreshed || echo created ) (http://<hub-ip>:8123)"
+    else
+      log "    ⚠ Home Assistant / Matter Server container start reported an error (non-fatal)"
+    fi
+  else
+    nohup bash "$runner" >"$runner_log" 2>&1 &
+    log "    ⏳ Downloading Home Assistant (~2.3 GB) in the background; the hub finishes its setup once it is up"
+  fi
+  echo
+}
+
+setup_network_sudoers() {
+  # Lets the web UI (Settings -> Network) switch Wi-Fi on/off, scan and connect through NetworkManager.
+  local SUDO_FILE="/etc/sudoers.d/dmxsmartlink-network"
+  local NMCLI RFKILL
+  NMCLI="$(command -v nmcli || echo /usr/bin/nmcli)"
+  RFKILL="$(command -v rfkill || echo /usr/sbin/rfkill)"
+  cat > "$SUDO_FILE" <<EOF
+$USER_NAME ALL=(root) NOPASSWD: $NMCLI, $RFKILL
+EOF
+  chmod 440 "$SUDO_FILE"
+  visudo -cf "$SUDO_FILE" >/dev/null 2>&1 || rm -f "$SUDO_FILE"
+  if command -v nmcli >/dev/null 2>&1; then
+    log "    ✓ Wi-Fi / Ethernet control from the web UI enabled (NetworkManager)"
+  else
+    log "    ⚠ NetworkManager (nmcli) not found; Wi-Fi control in the web UI is unavailable on this hub"
+  fi
+}
+
+install_kiosk() {
+  # Boot-to-hub browser for a Pi with its own screen: Chromium opens the hub full screen, past the
+  # self-signed certificate warning, touch friendly. Only where a desktop session and Chromium exist.
+  local CHROME=""
+  local c
+  for c in chromium chromium-browser; do
+    if command -v "$c" >/dev/null 2>&1; then CHROME="$(command -v "$c")"; break; fi
+  done
+  if [[ -z "$CHROME" ]] || [[ ! -d /etc/xdg/autostart ]]; then
+    log "    Kiosk: no desktop / Chromium on this hub; skipping (headless hub)"
+    return 0
+  fi
+  cat > /usr/local/bin/dmxsmartlink-kiosk <<'EOF_KIOSK'
+#!/bin/bash
+# DMXSmartLink kiosk: shows the hub full screen on this Pi's screen. Follows KIOSK_ENABLED in the hub's
+# Settings live: off closes the browser, on re-opens it. Started by the desktop session (xdg autostart).
+HUB="${DMXSL_KIOSK_HUB:-https://127.0.0.1:5000}"
+CHROME=""
+for c in chromium chromium-browser; do command -v "$c" >/dev/null 2>&1 && { CHROME="$c"; break; }; done
+[ -n "$CHROME" ] || exit 0
+enabled() { curl -sk -m 3 "$HUB/api/kiosk/state" 2>/dev/null | grep -q '"enabled": *true'; }
+PID=""
+while true; do
+  if enabled; then
+    if [ -z "$PID" ] || ! kill -0 "$PID" 2>/dev/null; then
+      nice -n 10 "$CHROME" --kiosk --start-fullscreen --noerrdialogs --disable-infobars --no-first-run --password-store=basic \
+        --ignore-certificate-errors --disable-session-crashed-bubble --disable-features=TranslateUI \
+        --check-for-update-interval=31536000 --overscroll-history-navigation=0 --touch-events=enabled \
+        --user-data-dir="$HOME/.config/dmxsmartlink-kiosk" "$HUB/" >/dev/null 2>&1 &
+      PID=$!
+    fi
+  else
+    if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then kill "$PID" 2>/dev/null; wait "$PID" 2>/dev/null; fi
+    PID=""
+  fi
+  sleep 5
+done
+EOF_KIOSK
+  chmod 755 /usr/local/bin/dmxsmartlink-kiosk
+  cat > /etc/xdg/autostart/dmxsmartlink-kiosk.desktop <<'EOF_DESK'
+[Desktop Entry]
+Type=Application
+Name=DMXSmartLink Hub (kiosk)
+Comment=Opens the DMXSmartLink hub full screen on this Pi's screen
+Exec=/usr/local/bin/dmxsmartlink-kiosk
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+EOF_DESK
+  log "    ✓ Kiosk installed: the hub opens full screen at boot (Settings → KIOSK_ENABLED turns it off)"
 }
 
 setup_audio_sudoers() {
@@ -708,6 +884,17 @@ Environment=PATH=${venv_path}/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 WantedBy=multi-user.target
 EOF
 
+  # Headless-safe audio: ensure a user PipeWire/Pulse session exists for the service user even
+  # without a graphical login. Without it pw-cat/parec/pactl have no server and the media /
+  # light-show audio pipeline is silent (confirmed on headless Ubuntu 24.04, 2026-07-03). Harmless
+  # on the Pi (its desktop session already runs PipeWire; enable --now is then a no-op).
+  loginctl enable-linger "$USER_NAME" 2>/dev/null || true
+  _pw_uid="$(id -u "$USER_NAME" 2>/dev/null || echo '')"
+  if [ -n "$_pw_uid" ]; then
+    sudo -u "$USER_NAME" XDG_RUNTIME_DIR="/run/user/$_pw_uid" \
+      systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service 2>/dev/null || true
+  fi
+
   systemctl daemon-reload
   systemctl enable dmxsmartlink.service
   systemctl restart dmxsmartlink.service
@@ -816,12 +1003,15 @@ install_docker
 add_user_to_docker
 start_homebridge                # Starts with DBus exposed into container
 install_govee_plugin            # Installs plugin + BLE deps + setcap inside container
+ensure_home_assistant           # Home Assistant + Matter Server containers (hub onboards HA itself)
 write_service
 configure_passwordless_sudo     # Allow service user to restart service without password
 setup_reboot_sudoers            # Allow UI reboot without broad sudo access
 setup_audio_sudoers             # Allow bluetoothctl/pactl for UI
 install_root_update_helpers     # Install root-owned update launcher/worker
 setup_update_sudoers            # Allow Update Now launcher without broad sudo access
+setup_network_sudoers           # Wi-Fi / Ethernet control from the web UI (nmcli, rfkill)
+install_kiosk                   # Pi with a screen: browser opens the hub full screen at boot
 
 log "âœ… All steps complete."
 log "Service status (last 30 lines):"

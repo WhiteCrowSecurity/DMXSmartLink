@@ -458,6 +458,28 @@ upgrade_files() {
 update_python_deps() {
   log "------------------------------------------------------"
   log "STEP 2: Updating Python dependencies..."
+
+  # Stream Deck (USB HID) support for upgraded installs: hidapi-libusb backend + udev access.
+  # Idempotent; mirrors setup.sh. libhidapi-hidraw0 may coexist (never apt-remove it: reverse-deps).
+  apt_install libhidapi-libusb0 libusb-1.0-0 >/dev/null 2>&1 || true
+  cat > /etc/udev/rules.d/10-streamdeck.rules <<'EOF_SD'
+# Elgato Stream Deck
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0fd9", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+# Mirabox StreamDock family (YoloLiv YoloDeck = 6603:1005), Ajazz (0300)
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="6603", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="6602", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="5548", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="5500", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0300", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+# their keyboard interface (event node) — the hub grabs it so presses don't type
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="6603", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="6602", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="5548", MODE="0660", GROUP="plugdev"
+EOF_SD
+  getent group plugdev >/dev/null 2>&1 || groupadd plugdev || true
+  usermod -aG plugdev "$USER_NAME" 2>/dev/null || true
+  udevadm control --reload-rules 2>/dev/null || true
+  udevadm trigger 2>/dev/null || true
   
   if [[ ! -d "$TARGET_DIR/.venv" ]]; then
     log "    âš  Virtual environment not found, creating new one..."
@@ -471,13 +493,13 @@ update_python_deps() {
       python3 -m venv .venv
       source .venv/bin/activate
       pip install -U pip
-      pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial
+      pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial streamdeck Pillow
     "
   else
     log "    Updating packages in existing virtual environment..."
     if [[ -f "$TARGET_DIR/.venv/bin/python" ]]; then
       "$TARGET_DIR/.venv/bin/python" -m pip install -U pip setuptools wheel >/dev/null 2>&1 || true
-      "$TARGET_DIR/.venv/bin/pip" install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial >/dev/null 2>&1 || true
+      "$TARGET_DIR/.venv/bin/pip" install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial streamdeck Pillow >/dev/null 2>&1 || true
       log "    âœ“ Dependencies updated"
     else
       log "    âš  Virtual environment python not found at $TARGET_DIR/.venv/bin/python"
@@ -692,6 +714,154 @@ except:
 }
 
 # Restart DMXSmartLink service
+# ---- Home Assistant + Matter Server (companion containers) -----------------------------------
+# Same footing as Homebridge: Docker containers on host networking, data under the user's home.
+# Idempotent: creates what is missing, refreshes what exists (pull + recreate with the same
+# arguments). Skipped, with a clear message, when Docker is absent or the disk is nearly full
+# (the Home Assistant image is ~2.3 GB). The hub onboards Home Assistant itself on first start
+# (homeassistant_setup.py): admin account, API token, local Govee + Matter integrations.
+HA_IMAGE="ghcr.io/home-assistant/home-assistant:stable"
+MATTER_IMAGE="ghcr.io/home-assistant-libs/python-matter-server:stable"
+HA_MIN_FREE_MB=4500
+
+_ha_free_mb() { df -Pm "$1" 2>/dev/null | awk 'NR==2{print $4}'; }
+
+ensure_home_assistant() {
+  log "------------------------------------------------------"
+  log "Home Assistant + Matter Server containers..."
+  if ! command -v docker >/dev/null 2>&1; then
+    log "    ⚠ Docker not found; skipping Home Assistant"
+    return 0
+  fi
+  local ha_dir="${HA_CONFIG_DIR:-/home/$USER_NAME/homeassistant-config}"
+  local matter_dir="${MATTER_DATA_DIR:-/home/$USER_NAME/matter-data}"
+  mkdir -p "$ha_dir" "$matter_dir"
+  chown "$USER_NAME:$USER_NAME" "$ha_dir" "$matter_dir" 2>/dev/null || true
+  local have_ha=0 have_matter=0
+  docker ps -a --format '{{.Names}}' | grep -qx homeassistant && have_ha=1
+  docker ps -a --format '{{.Names}}' | grep -qx matter-server && have_matter=1
+  local free_mb
+  free_mb="$(_ha_free_mb /var/lib/docker 2>/dev/null || _ha_free_mb /)"
+  if [[ $have_ha -eq 0 ]] && [[ -n "$free_mb" ]] && (( free_mb < HA_MIN_FREE_MB )); then
+    log "    ⚠ Only ${free_mb} MB free; Home Assistant needs ~${HA_MIN_FREE_MB} MB. Skipping (free space and re-run the update)."
+    return 0
+  fi
+  local tz
+  tz="$(cat /etc/timezone 2>/dev/null || timedatectl show -p Timezone --value 2>/dev/null || echo UTC)"
+  local dbus_dir dbus_vol=""
+  dbus_dir="$( [[ -S /run/dbus/system_bus_socket ]] && echo /run/dbus || ( [[ -S /var/run/dbus/system_bus_socket ]] && echo /var/run/dbus ) || true )"
+  [[ -n "$dbus_dir" ]] && dbus_vol="-v ${dbus_dir}:/run/dbus:ro"
+
+  # The images are large (Home Assistant ~2.3 GB). When they are not on the box yet, pull and
+  # start them in the BACKGROUND so the update itself finishes promptly; the hub's setup thread
+  # waits for the container and onboards Home Assistant once it answers.
+  # A fixed /tmp path can be unwritable for root when another user created it (fs.protected_regular),
+  # so use a fresh temp file and keep the log with the hub's logs; never let this step abort the update.
+  rm -f /tmp/dmxsl_ha_containers.sh 2>/dev/null || true
+  local runner
+  runner="$(mktemp /tmp/dmxsl_ha_containers.XXXXXX 2>/dev/null || echo /tmp/dmxsl_ha_containers.$$.sh)"
+  local runner_log="/home/$USER_NAME/dmxsmartlink/logs/ha_containers.log"
+  mkdir -p "$(dirname "$runner_log")" 2>/dev/null || true
+  if ! cat > "$runner" <<EOF_HA
+#!/bin/bash
+docker pull "$HA_IMAGE" >/dev/null 2>&1 || true
+docker rm -f homeassistant >/dev/null 2>&1 || true
+docker run -d --name homeassistant --restart=unless-stopped --network host --privileged \
+  -e TZ="$tz" -v "$ha_dir":/config "$HA_IMAGE" >/dev/null 2>&1
+docker pull "$MATTER_IMAGE" >/dev/null 2>&1 || true
+docker rm -f matter-server >/dev/null 2>&1 || true
+docker run -d --name matter-server --restart=unless-stopped --network host \
+  --security-opt apparmor=unconfined $dbus_vol -v "$matter_dir":/data \
+  "$MATTER_IMAGE" --storage-path /data --log-level info >/dev/null 2>&1
+EOF_HA
+  then
+    log "    ⚠ Could not write the Home Assistant container script ($runner); skipping Home Assistant this time"
+    return 0
+  fi
+  chmod +x "$runner"
+  if docker image inspect "$HA_IMAGE" >/dev/null 2>&1; then
+    if bash "$runner"; then
+      log "    ✓ Home Assistant + Matter Server containers $( [[ $have_ha -eq 1 ]] && echo refreshed || echo created ) (http://<hub-ip>:8123)"
+    else
+      log "    ⚠ Home Assistant / Matter Server container start reported an error (non-fatal)"
+    fi
+  else
+    nohup bash "$runner" >"$runner_log" 2>&1 &
+    log "    ⏳ Downloading Home Assistant (~2.3 GB) in the background; the hub finishes its setup once it is up"
+  fi
+  echo
+}
+
+setup_network_sudoers() {
+  # Lets the web UI (Settings -> Network) switch Wi-Fi on/off, scan and connect through NetworkManager.
+  local SUDO_FILE="/etc/sudoers.d/dmxsmartlink-network"
+  local NMCLI RFKILL
+  NMCLI="$(command -v nmcli || echo /usr/bin/nmcli)"
+  RFKILL="$(command -v rfkill || echo /usr/sbin/rfkill)"
+  cat > "$SUDO_FILE" <<EOF
+$USER_NAME ALL=(root) NOPASSWD: $NMCLI, $RFKILL
+EOF
+  chmod 440 "$SUDO_FILE"
+  visudo -cf "$SUDO_FILE" >/dev/null 2>&1 || rm -f "$SUDO_FILE"
+  if command -v nmcli >/dev/null 2>&1; then
+    log "    ✓ Wi-Fi / Ethernet control from the web UI enabled (NetworkManager)"
+  else
+    log "    ⚠ NetworkManager (nmcli) not found; Wi-Fi control in the web UI is unavailable on this hub"
+  fi
+}
+
+install_kiosk() {
+  # Boot-to-hub browser for a Pi with its own screen: Chromium opens the hub full screen, past the
+  # self-signed certificate warning, touch friendly. Only where a desktop session and Chromium exist.
+  local CHROME=""
+  local c
+  for c in chromium chromium-browser; do
+    if command -v "$c" >/dev/null 2>&1; then CHROME="$(command -v "$c")"; break; fi
+  done
+  if [[ -z "$CHROME" ]] || [[ ! -d /etc/xdg/autostart ]]; then
+    log "    Kiosk: no desktop / Chromium on this hub; skipping (headless hub)"
+    return 0
+  fi
+  cat > /usr/local/bin/dmxsmartlink-kiosk <<'EOF_KIOSK'
+#!/bin/bash
+# DMXSmartLink kiosk: shows the hub full screen on this Pi's screen. Follows KIOSK_ENABLED in the hub's
+# Settings live: off closes the browser, on re-opens it. Started by the desktop session (xdg autostart).
+HUB="${DMXSL_KIOSK_HUB:-https://127.0.0.1:5000}"
+CHROME=""
+for c in chromium chromium-browser; do command -v "$c" >/dev/null 2>&1 && { CHROME="$c"; break; }; done
+[ -n "$CHROME" ] || exit 0
+enabled() { curl -sk -m 3 "$HUB/api/kiosk/state" 2>/dev/null | grep -q '"enabled": *true'; }
+PID=""
+while true; do
+  if enabled; then
+    if [ -z "$PID" ] || ! kill -0 "$PID" 2>/dev/null; then
+      nice -n 10 "$CHROME" --kiosk --start-fullscreen --noerrdialogs --disable-infobars --no-first-run --password-store=basic \
+        --ignore-certificate-errors --disable-session-crashed-bubble --disable-features=TranslateUI \
+        --check-for-update-interval=31536000 --overscroll-history-navigation=0 --touch-events=enabled \
+        --user-data-dir="$HOME/.config/dmxsmartlink-kiosk" "$HUB/" >/dev/null 2>&1 &
+      PID=$!
+    fi
+  else
+    if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then kill "$PID" 2>/dev/null; wait "$PID" 2>/dev/null; fi
+    PID=""
+  fi
+  sleep 5
+done
+EOF_KIOSK
+  chmod 755 /usr/local/bin/dmxsmartlink-kiosk
+  cat > /etc/xdg/autostart/dmxsmartlink-kiosk.desktop <<'EOF_DESK'
+[Desktop Entry]
+Type=Application
+Name=DMXSmartLink Hub (kiosk)
+Comment=Opens the DMXSmartLink hub full screen on this Pi's screen
+Exec=/usr/local/bin/dmxsmartlink-kiosk
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+EOF_DESK
+  log "    ✓ Kiosk installed: the hub opens full screen at boot (Settings → KIOSK_ENABLED turns it off)"
+}
+
 restart_service() {
   log "------------------------------------------------------"
   log "STEP 4: Restarting DMXSmartLink service..."
@@ -742,8 +912,20 @@ log "STEP 1: Downloading latest release..."
 
 # Download and extract release
 SRC_DIR=$(download_release "$DIST_DIR")
+# When this release ships a newer updater, install it and hand over to it right away (once), so the
+# steps it adds (e.g. new host prerequisites) run in THIS update instead of the next one.
+NEWER_UPDATER=0
+if [[ -z "${DMXSL_UPDATER_REEXEC:-}" ]] && [[ -f "$SRC_DIR/upgrade_pi5.sh" ]] && ! cmp -s "$SRC_DIR/upgrade_pi5.sh" "${BASH_SOURCE[0]}"; then
+  NEWER_UPDATER=1
+fi
 refresh_root_update_worker_from_release "$SRC_DIR"
 refresh_root_update_launcher
+if [[ $NEWER_UPDATER -eq 1 ]] && [[ -x "$ROOT_UPDATE_WORKER" ]] && [[ $(id -u) -eq 0 ]]; then
+  log "    This release ships a newer updater; continuing with it"
+  export DMXSL_UPDATER_REEXEC=1
+  trap - EXIT
+  exec bash "$ROOT_UPDATE_WORKER"
+fi
 ensure_reboot_sudoers
 stop_service_for_upgrade
 
@@ -782,6 +964,11 @@ realign_service_workdir
 
 # Update Homebridge
 update_homebridge
+# Home Assistant + Matter Server (create if missing, refresh if present)
+ensure_home_assistant
+# Wi-Fi / Ethernet control from the web UI, and the boot-to-hub kiosk on Pis with a screen
+setup_network_sudoers
+install_kiosk
 
 if request_system_reboot; then
   exit 0
