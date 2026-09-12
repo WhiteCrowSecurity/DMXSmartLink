@@ -1,5 +1,23 @@
 # DMXSmartLink Release Notes
 
+## 2026.09.12 — Licensing housekeeping
+
+Nothing changes in how the hub behaves for you. This release removes an outside
+dependency from the licence check and grows the fixture library.
+
+### Licensing
+
+- **The licence check no longer contacts anyone outside DMX Smart Link.** The hub used to look up its
+  own public address from a third-party website before checking in with our licence server. It does
+  not any more — our server simply sees the address the connection came from.
+- On a hub with **no internet**, start-up is now quicker: it no longer waits on that lookup before
+  carrying on offline. As before, a hub with no internet keeps running normally on its licence key.
+
+### Fixture library
+
+- Now ships **12,939 fixture profiles**.
+
+
 ## 2026.09.12 — MIDI controllers, and a one-command Pi install
 
 ### MIDI (new)
