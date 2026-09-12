@@ -106,8 +106,14 @@ scene or take it down in Visual Control.
 ## Questions
 
 **Can I use this on a par can or a wash, not a moving head?**
-Yes. If a fixture cannot pan or tilt, the pad drives whatever it *does* have — its dimmer and colour.
-Handy for riding a house wash from the back of the room.
+Yes. If a fixture cannot pan or tilt, the pad drives its **intensity on one axis and its colour on
+the other** — handy for riding a house wash from the back of the room. The labels around the pad
+change to say what it is actually driving, so you are never guessing.
+
+**Will it disturb anything I have not touched?**
+No. It only ever drives the two pad axes plus zoom, focus and the dimmer, and it does not write even
+those until you move them. Selecting a fixture changes nothing at all — your scene stays exactly as
+it was until you push the stick.
 
 **What happens if my phone dies or the wifi drops mid-move?**
 The light stops by itself within about half a second. It does not keep travelling.

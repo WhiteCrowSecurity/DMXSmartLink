@@ -1,5 +1,37 @@
 # DMXSmartLink Release Notes
 
+## 2026.09.12 — Follow Spot, and backups
+
+### Follow Spot (new)
+
+- **Steer a light by hand, live.** A new **Follow Spot** page lets one person keep a moving head on a speaker, a singer or a bride as they walk — from a phone, a tablet, or a game controller. Push and hold to move; let go and the light stops where it is.
+- **Works from a phone at the back of the room.** The control is a thumbstick that appears wherever your thumb lands, so you are never hunting for it in the dark. No app to install — it is a page on your hub.
+- **Aim mode.** Tap a fixed mark — a lectern, a door, a step — and the beam goes straight there, for the positions you already know.
+- **A sensitivity knob.** Set how fast the light travels, and hold **Fine control** for quarter speed when you are settling onto a face.
+- **Handles fixtures hung upside down.** One switch per fixture flips its controls the right way round, with separate switches for inverting pan and tilt. Set it once when the light is rigged; it is remembered. Because it is per fixture, you can steer a hung mover and a floor-standing one together and both follow your hand.
+- **Xbox and PlayStation controllers.** Plug one into the hub and it is picked up automatically — left stick pans and tilts, the right stick drives zoom and focus, the triggers ride the dimmer.
+- **Full 16-bit movement** on fixtures that support it, so small corrections at a long throw stay invisible instead of stepping.
+- **Works with more than moving heads.** A fixture that cannot pan or tilt is still steerable on whatever it does have, so you can ride a wash's dimmer and colour from your phone.
+- **Safe to hand to a volunteer.** Taking a fixture stops other screens writing to it, so nothing fights over the same light — and if the phone sleeps or the wifi drops mid-move, the light stops on its own rather than drifting.
+- **It touches nothing you did not move.** The follow spot drives its two pad axes plus zoom, focus and the dimmer, and not even those until you move them. Selecting a fixture changes nothing at all — your scene stays exactly as it was until you push the stick.
+
+### Backup and restore (new)
+
+- **Export your whole setup to one file.** Settings → **Backup & restore** → **Export backup** saves your fixtures, scenes, groups, devices, the Visual Control stage layout and your settings into a single `.zip`.
+- **Put it back in two clicks.** Import shows you when the backup was made and what it will replace *before* anything changes, then restores it. No restart needed.
+- **Moving to a new machine is now a supported path.** Export on the old hub, install on the new one, activate its licence, import.
+- **Your licence key and passwords are never written into the file.** A backup is safe to keep in cloud storage or send to support. A restored hub keeps its own licence.
+- **A restore cannot eat your setup.** Everything it overwrites is copied aside first.
+
+### Fixture library
+
+- The built-in library now ships **12,862 fixture profiles**.
+
+### Documentation
+
+- New step-by-step guides in the [docs folder](https://github.com/WhiteCrowSecurity/DMXSmartLink/tree/main/docs): installing, activating a licence, updating, the Follow Spot, backup and restore, plus architecture diagrams showing how the hub fits into an existing rig.
+
+
 ## 2026.06.23 — Windows support (new!)
 
 DMX Smart Link now runs natively on **Windows 11** — no Raspberry Pi or Linux required.

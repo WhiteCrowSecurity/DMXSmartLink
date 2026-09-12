@@ -232,10 +232,13 @@ check_installation() {
 # Download and extract latest release
 download_release() {
   local TEMP_DIR="/tmp/dmxsmartlink-upgrade-$$"
-  local ZIP_PATH="/tmp/dmxsmartlink-release-$$.zip"
+  local ZIP_PATH="/tmp/dmxsmartlink-release-$$.zip"   # re-pointed to .tar.gz below for per-arch dist assets
+  local ARCHIVE_KIND="zip"
+  local ARCHIVE_BASE="/tmp/dmxsmartlink-release-$$"
+  local RELEASE_TAG=""
   local GITHUB_REPO="WhiteCrowSecurity/DMXSmartLink"
   
-  rm -rf "$TEMP_DIR" "$ZIP_PATH"
+  rm -rf "$TEMP_DIR" "$ARCHIVE_BASE".zip "$ARCHIVE_BASE".tar.gz
   mkdir -p "$TEMP_DIR"
   
   # Resolve the update channel: a 'test' box (dev only) pulls the newest GitHub
@@ -278,23 +281,42 @@ download_release() {
 
   local DOWNLOAD_URL=""
   if [[ -z "$API_ERROR" ]] && [[ -n "$REL_JSON" ]] && command -v python3 >/dev/null 2>&1; then
-    DOWNLOAD_URL="$(
-      printf '%s' "$REL_JSON" | CHANNEL="$CHANNEL" python3 -c '
+    local PARSED
+    PARSED="$(
+      printf '%s' "$REL_JSON" | CHANNEL="$CHANNEL" DIST_DIR="$DIST_DIR" python3 -c '
 import json, os, sys
 CHANNEL = os.environ.get("CHANNEL", "stable")
+DIST_DIR = os.environ.get("DIST_DIR", "")
+TARBALL = (DIST_DIR + ".tar.gz").lower() if DIST_DIR else ""
 
-def zip_from(rel):
-    for asset in (rel.get("assets") or []):
+def asset_url(rel):
+    assets = rel.get("assets") or []
+    # 1) the per-arch dist tarball (dist_pi5.tar.gz) -- smallest payload, and the only
+    #    asset the size-capped git-tree bridge cannot carry; prefer it when present.
+    if TARBALL:
+        for asset in assets:
+            url = asset.get("browser_download_url", "") or ""
+            name = (asset.get("name", "") or "").lower()
+            if name == TARBALL and url:
+                return url
+    # 2) the universal bundle zip (dmxsmartlink*.zip)
+    for asset in assets:
         url = asset.get("browser_download_url", "") or ""
         name = (asset.get("name", "") or "").lower()
         if "dmxsmartlink" in name and name.endswith(".zip") and url:
             return url
-    for asset in (rel.get("assets") or []):
+    # 3) any .zip asset
+    for asset in assets:
         url = asset.get("browser_download_url", "") or ""
         name = asset.get("name", "") or ""
         if (url.endswith(".zip") or name.endswith(".zip")) and url:
             return url
+    # 4) GitHub source zipball (last resort)
     return rel.get("zipball_url", "") or ""
+
+def emit(rel):
+    print(asset_url(rel) or "")
+    print(rel.get("tag_name", "") or "")
 
 try:
     d = json.loads(sys.stdin.read() or "{}")
@@ -302,18 +324,27 @@ try:
         # the releases list is newest-first; take the newest pre-release
         for rel in d:
             if isinstance(rel, dict) and rel.get("prerelease"):
-                print(zip_from(rel))
+                emit(rel)
                 raise SystemExit(0)
         print("")  # no pre-release -> caller falls back to stable
+        print("")
         raise SystemExit(0)
     if isinstance(d, dict) and d.get("message"):
         print("")
+        print("")
         raise SystemExit(0)
-    print(zip_from(d) if isinstance(d, dict) else "")
+    if isinstance(d, dict):
+        emit(d)
+    else:
+        print("")
+        print("")
 except Exception:
+    print("")
     print("")
 ' 2>/dev/null
     )"
+    DOWNLOAD_URL="$(printf '%s\n' "$PARSED" | sed -n '1p')"
+    RELEASE_TAG="$(printf '%s\n' "$PARSED" | sed -n '2p')"
   fi
 
   # Fallback to direct download (stable 'latest'). A test box with no pre-release
@@ -325,14 +356,28 @@ except Exception:
     DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/dmxsmartlink.zip"
   fi
   
-  log "    Downloading release..."
+  # A per-arch dist tarball (e.g. dist_pi5.tar.gz) ends in .tar.gz; the universal bundle
+  # and the GitHub source archive are .zip. Re-point ZIP_PATH and record how to extract.
+  if [[ "$DOWNLOAD_URL" == *.tar.gz ]]; then
+    ARCHIVE_KIND="tar"; ZIP_PATH="$ARCHIVE_BASE.tar.gz"
+  else
+    ARCHIVE_KIND="zip"; ZIP_PATH="$ARCHIVE_BASE.zip"
+  fi
+
+  log "    Downloading release ($ARCHIVE_KIND)..."
   if ! curl -fL "$DOWNLOAD_URL" -o "$ZIP_PATH" 2>/dev/null; then
     log "âŒ Failed to download release zip"
     rm -rf "$TEMP_DIR" "$ZIP_PATH"
     exit 1
   fi
   
-  if ! extract_zip_allowing_warnings "$ZIP_PATH" "$TEMP_DIR"; then
+  EXTRACT_OK=1
+  if [[ "$ARCHIVE_KIND" == "tar" ]]; then
+    tar -xzf "$ZIP_PATH" -C "$TEMP_DIR" 2>/dev/null || EXTRACT_OK=0
+  else
+    extract_zip_allowing_warnings "$ZIP_PATH" "$TEMP_DIR" || EXTRACT_OK=0
+  fi
+  if [[ "$EXTRACT_OK" != "1" ]]; then
     log "âŒ Failed to extract zip file"
     rm -rf "$TEMP_DIR" "$ZIP_PATH"
     exit 1
@@ -369,6 +414,12 @@ except Exception:
   log "    Source directory verified: $SRC_DIR"
   log "    Contents: $(ls -1 "$SRC_DIR" 2>/dev/null | head -10 | tr '\n' ' ' || echo 'empty')"
   
+  # Hand the resolved release tag to MAIN so it can stamp VERSION authoritatively -- the
+  # tag is the source of truth; a stale VERSION inside the payload must not win.
+  if [[ -n "$RELEASE_TAG" ]]; then
+    printf '%s' "$RELEASE_TAG" > "/tmp/dmxsmartlink-release-tag-$$" 2>/dev/null || true
+  fi
+
   echo "$SRC_DIR"
 }
 
@@ -407,6 +458,28 @@ upgrade_files() {
 update_python_deps() {
   log "------------------------------------------------------"
   log "STEP 2: Updating Python dependencies..."
+
+  # Stream Deck (USB HID) support for upgraded installs: hidapi-libusb backend + udev access.
+  # Idempotent; mirrors setup.sh. libhidapi-hidraw0 may coexist (never apt-remove it: reverse-deps).
+  apt_install libhidapi-libusb0 libusb-1.0-0 >/dev/null 2>&1 || true
+  cat > /etc/udev/rules.d/10-streamdeck.rules <<'EOF_SD'
+# Elgato Stream Deck
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0fd9", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+# Mirabox StreamDock family (YoloLiv YoloDeck = 6603:1005), Ajazz (0300)
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="6603", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="6602", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="5548", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="5500", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0300", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+# their keyboard interface (event node) — the hub grabs it so presses don't type
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="6603", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="6602", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="5548", MODE="0660", GROUP="plugdev"
+EOF_SD
+  getent group plugdev >/dev/null 2>&1 || groupadd plugdev || true
+  usermod -aG plugdev "$USER_NAME" 2>/dev/null || true
+  udevadm control --reload-rules 2>/dev/null || true
+  udevadm trigger 2>/dev/null || true
   
   if [[ ! -d "$TARGET_DIR/.venv" ]]; then
     log "    âš  Virtual environment not found, creating new one..."
@@ -420,13 +493,13 @@ update_python_deps() {
       python3 -m venv .venv
       source .venv/bin/activate
       pip install -U pip
-      pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial
+      pip install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial streamdeck Pillow
     "
   else
     log "    Updating packages in existing virtual environment..."
     if [[ -f "$TARGET_DIR/.venv/bin/python" ]]; then
       "$TARGET_DIR/.venv/bin/python" -m pip install -U pip setuptools wheel >/dev/null 2>&1 || true
-      "$TARGET_DIR/.venv/bin/pip" install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial >/dev/null 2>&1 || true
+      "$TARGET_DIR/.venv/bin/pip" install -U Flask requests 'PyJWT[crypto]' pyarmor pyarmor.cli.core pyserial streamdeck Pillow >/dev/null 2>&1 || true
       log "    âœ“ Dependencies updated"
     else
       log "    âš  Virtual environment python not found at $TARGET_DIR/.venv/bin/python"
@@ -641,6 +714,154 @@ except:
 }
 
 # Restart DMXSmartLink service
+# ---- Home Assistant + Matter Server (companion containers) -----------------------------------
+# Same footing as Homebridge: Docker containers on host networking, data under the user's home.
+# Idempotent: creates what is missing, refreshes what exists (pull + recreate with the same
+# arguments). Skipped, with a clear message, when Docker is absent or the disk is nearly full
+# (the Home Assistant image is ~2.3 GB). The hub onboards Home Assistant itself on first start
+# (homeassistant_setup.py): admin account, API token, local Govee + Matter integrations.
+HA_IMAGE="ghcr.io/home-assistant/home-assistant:stable"
+MATTER_IMAGE="ghcr.io/home-assistant-libs/python-matter-server:stable"
+HA_MIN_FREE_MB=4500
+
+_ha_free_mb() { df -Pm "$1" 2>/dev/null | awk 'NR==2{print $4}'; }
+
+ensure_home_assistant() {
+  log "------------------------------------------------------"
+  log "Home Assistant + Matter Server containers..."
+  if ! command -v docker >/dev/null 2>&1; then
+    log "    ⚠ Docker not found; skipping Home Assistant"
+    return 0
+  fi
+  local ha_dir="${HA_CONFIG_DIR:-/home/$USER_NAME/homeassistant-config}"
+  local matter_dir="${MATTER_DATA_DIR:-/home/$USER_NAME/matter-data}"
+  mkdir -p "$ha_dir" "$matter_dir"
+  chown "$USER_NAME:$USER_NAME" "$ha_dir" "$matter_dir" 2>/dev/null || true
+  local have_ha=0 have_matter=0
+  docker ps -a --format '{{.Names}}' | grep -qx homeassistant && have_ha=1
+  docker ps -a --format '{{.Names}}' | grep -qx matter-server && have_matter=1
+  local free_mb
+  free_mb="$(_ha_free_mb /var/lib/docker 2>/dev/null || _ha_free_mb /)"
+  if [[ $have_ha -eq 0 ]] && [[ -n "$free_mb" ]] && (( free_mb < HA_MIN_FREE_MB )); then
+    log "    ⚠ Only ${free_mb} MB free; Home Assistant needs ~${HA_MIN_FREE_MB} MB. Skipping (free space and re-run the update)."
+    return 0
+  fi
+  local tz
+  tz="$(cat /etc/timezone 2>/dev/null || timedatectl show -p Timezone --value 2>/dev/null || echo UTC)"
+  local dbus_dir dbus_vol=""
+  dbus_dir="$( [[ -S /run/dbus/system_bus_socket ]] && echo /run/dbus || ( [[ -S /var/run/dbus/system_bus_socket ]] && echo /var/run/dbus ) || true )"
+  [[ -n "$dbus_dir" ]] && dbus_vol="-v ${dbus_dir}:/run/dbus:ro"
+
+  # The images are large (Home Assistant ~2.3 GB). When they are not on the box yet, pull and
+  # start them in the BACKGROUND so the update itself finishes promptly; the hub's setup thread
+  # waits for the container and onboards Home Assistant once it answers.
+  # A fixed /tmp path can be unwritable for root when another user created it (fs.protected_regular),
+  # so use a fresh temp file and keep the log with the hub's logs; never let this step abort the update.
+  rm -f /tmp/dmxsl_ha_containers.sh 2>/dev/null || true
+  local runner
+  runner="$(mktemp /tmp/dmxsl_ha_containers.XXXXXX 2>/dev/null || echo /tmp/dmxsl_ha_containers.$$.sh)"
+  local runner_log="/home/$USER_NAME/dmxsmartlink/logs/ha_containers.log"
+  mkdir -p "$(dirname "$runner_log")" 2>/dev/null || true
+  if ! cat > "$runner" <<EOF_HA
+#!/bin/bash
+docker pull "$HA_IMAGE" >/dev/null 2>&1 || true
+docker rm -f homeassistant >/dev/null 2>&1 || true
+docker run -d --name homeassistant --restart=unless-stopped --network host --privileged \
+  -e TZ="$tz" -v "$ha_dir":/config "$HA_IMAGE" >/dev/null 2>&1
+docker pull "$MATTER_IMAGE" >/dev/null 2>&1 || true
+docker rm -f matter-server >/dev/null 2>&1 || true
+docker run -d --name matter-server --restart=unless-stopped --network host \
+  --security-opt apparmor=unconfined $dbus_vol -v "$matter_dir":/data \
+  "$MATTER_IMAGE" --storage-path /data --log-level info >/dev/null 2>&1
+EOF_HA
+  then
+    log "    ⚠ Could not write the Home Assistant container script ($runner); skipping Home Assistant this time"
+    return 0
+  fi
+  chmod +x "$runner"
+  if docker image inspect "$HA_IMAGE" >/dev/null 2>&1; then
+    if bash "$runner"; then
+      log "    ✓ Home Assistant + Matter Server containers $( [[ $have_ha -eq 1 ]] && echo refreshed || echo created ) (http://<hub-ip>:8123)"
+    else
+      log "    ⚠ Home Assistant / Matter Server container start reported an error (non-fatal)"
+    fi
+  else
+    nohup bash "$runner" >"$runner_log" 2>&1 &
+    log "    ⏳ Downloading Home Assistant (~2.3 GB) in the background; the hub finishes its setup once it is up"
+  fi
+  echo
+}
+
+setup_network_sudoers() {
+  # Lets the web UI (Settings -> Network) switch Wi-Fi on/off, scan and connect through NetworkManager.
+  local SUDO_FILE="/etc/sudoers.d/dmxsmartlink-network"
+  local NMCLI RFKILL
+  NMCLI="$(command -v nmcli || echo /usr/bin/nmcli)"
+  RFKILL="$(command -v rfkill || echo /usr/sbin/rfkill)"
+  cat > "$SUDO_FILE" <<EOF
+$USER_NAME ALL=(root) NOPASSWD: $NMCLI, $RFKILL
+EOF
+  chmod 440 "$SUDO_FILE"
+  visudo -cf "$SUDO_FILE" >/dev/null 2>&1 || rm -f "$SUDO_FILE"
+  if command -v nmcli >/dev/null 2>&1; then
+    log "    ✓ Wi-Fi / Ethernet control from the web UI enabled (NetworkManager)"
+  else
+    log "    ⚠ NetworkManager (nmcli) not found; Wi-Fi control in the web UI is unavailable on this hub"
+  fi
+}
+
+install_kiosk() {
+  # Boot-to-hub browser for a Pi with its own screen: Chromium opens the hub full screen, past the
+  # self-signed certificate warning, touch friendly. Only where a desktop session and Chromium exist.
+  local CHROME=""
+  local c
+  for c in chromium chromium-browser; do
+    if command -v "$c" >/dev/null 2>&1; then CHROME="$(command -v "$c")"; break; fi
+  done
+  if [[ -z "$CHROME" ]] || [[ ! -d /etc/xdg/autostart ]]; then
+    log "    Kiosk: no desktop / Chromium on this hub; skipping (headless hub)"
+    return 0
+  fi
+  cat > /usr/local/bin/dmxsmartlink-kiosk <<'EOF_KIOSK'
+#!/bin/bash
+# DMXSmartLink kiosk: shows the hub full screen on this Pi's screen. Follows KIOSK_ENABLED in the hub's
+# Settings live: off closes the browser, on re-opens it. Started by the desktop session (xdg autostart).
+HUB="${DMXSL_KIOSK_HUB:-https://127.0.0.1:5000}"
+CHROME=""
+for c in chromium chromium-browser; do command -v "$c" >/dev/null 2>&1 && { CHROME="$c"; break; }; done
+[ -n "$CHROME" ] || exit 0
+enabled() { curl -sk -m 3 "$HUB/api/kiosk/state" 2>/dev/null | grep -q '"enabled": *true'; }
+PID=""
+while true; do
+  if enabled; then
+    if [ -z "$PID" ] || ! kill -0 "$PID" 2>/dev/null; then
+      nice -n 10 "$CHROME" --kiosk --start-fullscreen --noerrdialogs --disable-infobars --no-first-run --password-store=basic \
+        --ignore-certificate-errors --disable-session-crashed-bubble --disable-features=TranslateUI \
+        --check-for-update-interval=31536000 --overscroll-history-navigation=0 --touch-events=enabled \
+        --user-data-dir="$HOME/.config/dmxsmartlink-kiosk" "$HUB/" >/dev/null 2>&1 &
+      PID=$!
+    fi
+  else
+    if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then kill "$PID" 2>/dev/null; wait "$PID" 2>/dev/null; fi
+    PID=""
+  fi
+  sleep 5
+done
+EOF_KIOSK
+  chmod 755 /usr/local/bin/dmxsmartlink-kiosk
+  cat > /etc/xdg/autostart/dmxsmartlink-kiosk.desktop <<'EOF_DESK'
+[Desktop Entry]
+Type=Application
+Name=DMXSmartLink Hub (kiosk)
+Comment=Opens the DMXSmartLink hub full screen on this Pi's screen
+Exec=/usr/local/bin/dmxsmartlink-kiosk
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+EOF_DESK
+  log "    ✓ Kiosk installed: the hub opens full screen at boot (Settings → KIOSK_ENABLED turns it off)"
+}
+
 restart_service() {
   log "------------------------------------------------------"
   log "STEP 4: Restarting DMXSmartLink service..."
@@ -691,16 +912,45 @@ log "STEP 1: Downloading latest release..."
 
 # Download and extract release
 SRC_DIR=$(download_release "$DIST_DIR")
+# When this release ships a newer updater, install it and hand over to it right away (once), so the
+# steps it adds (e.g. new host prerequisites) run in THIS update instead of the next one.
+NEWER_UPDATER=0
+if [[ -z "${DMXSL_UPDATER_REEXEC:-}" ]] && [[ -f "$SRC_DIR/upgrade_pi5.sh" ]] && ! cmp -s "$SRC_DIR/upgrade_pi5.sh" "${BASH_SOURCE[0]}"; then
+  NEWER_UPDATER=1
+fi
 refresh_root_update_worker_from_release "$SRC_DIR"
 refresh_root_update_launcher
+if [[ $NEWER_UPDATER -eq 1 ]] && [[ -x "$ROOT_UPDATE_WORKER" ]] && [[ $(id -u) -eq 0 ]]; then
+  log "    This release ships a newer updater; continuing with it"
+  export DMXSL_UPDATER_REEXEC=1
+  trap - EXIT
+  exec bash "$ROOT_UPDATE_WORKER"
+fi
 ensure_reboot_sudoers
 stop_service_for_upgrade
 
 # Upgrade files
 upgrade_files "$SRC_DIR"
 
+# Stamp VERSION from the release tag so the in-app "current version" reflects exactly what
+# was installed -- authoritative over any stale VERSION baked into the payload. The tag is
+# DMXSmartLink-v<date>; strip the prefix, and only accept a version-looking value so the
+# moving stable "DMXSmartLink" tag never clobbers VERSION.
+RELEASE_TAG_FILE="/tmp/dmxsmartlink-release-tag-$$"
+if [[ -s "$RELEASE_TAG_FILE" ]]; then
+  TAG_RAW="$(cat "$RELEASE_TAG_FILE" 2>/dev/null | tr -d '[:space:]')"
+  TAG_VER="${TAG_RAW#DMXSmartLink-v}"
+  TAG_VER="${TAG_VER#DMXSmartLink-}"
+  TAG_VER="${TAG_VER#v}"
+  if [[ "$TAG_VER" =~ ^[0-9] ]]; then
+    printf '%s\n' "$TAG_VER" > "$TARGET_DIR/VERSION"
+    chown "$USER_NAME:$USER_NAME" "$TARGET_DIR/VERSION" 2>/dev/null || true
+    log "    Stamped VERSION from release tag: $TAG_VER"
+  fi
+fi
+
 # Cleanup temp files from download
-rm -rf "/tmp/dmxsmartlink-upgrade-$$" "/tmp/dmxsmartlink-release-$$.zip" 2>/dev/null || true
+rm -rf "/tmp/dmxsmartlink-upgrade-$$" "/tmp/dmxsmartlink-release-$$".zip "/tmp/dmxsmartlink-release-$$".tar.gz "$RELEASE_TAG_FILE" 2>/dev/null || true
 
 # Update Python dependencies (PyArmor) OR convert the service to the Nuitka binary
 if ! convert_to_nuitka_if_needed; then
@@ -714,6 +964,11 @@ realign_service_workdir
 
 # Update Homebridge
 update_homebridge
+# Home Assistant + Matter Server (create if missing, refresh if present)
+ensure_home_assistant
+# Wi-Fi / Ethernet control from the web UI, and the boot-to-hub kiosk on Pis with a screen
+setup_network_sudoers
+install_kiosk
 
 if request_system_reboot; then
   exit 0
