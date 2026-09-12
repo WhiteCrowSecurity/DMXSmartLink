@@ -23,18 +23,22 @@ will be typing this address on phones and saving it in Stream Deck buttons; you 
 A Raspberry Pi 5 is the usual choice. A Pi 4 works.
 
 1. Install Raspberry Pi OS (64-bit) or Ubuntu, and make sure you can log in over SSH.
-2. Download the release for your machine from the
-   [Releases page](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases) and unpack it into the
-   user's home folder — for a user `dmx`, that is `/home/dmx`.
-3. Run the installer as root:
+2. Log in, and run **one command**:
 
    ```bash
-   sudo bash /home/dmx/setup.sh
+   cd ~ && curl -fsSL https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest/download/setup.sh -o setup.sh && sudo bash setup.sh
    ```
 
-4. Leave it alone. It installs Python packages into a virtual environment, sets up Docker and
+   That is the whole install. The script downloads the right build for your machine by itself —
+   there is nothing to unpack and no release page to pick from.
+
+3. Leave it alone. It installs Python packages into a virtual environment, sets up Docker and
    Homebridge for smart-light support, and creates a `dmxsmartlink` systemd service.
-5. When it finishes, open `https://<pi-address>:5000` in a browser.
+4. When it finishes, open `https://<pi-address>:5000` in a browser.
+
+> **Run it from your home folder.** The `cd ~` matters: the script works out which user to install
+> for from the folder it is sitting in. Running it from `/tmp` or `Downloads` will install to the
+> wrong place.
 
 Your browser will warn about the certificate. That is expected — the hub generates its own, because
 it serves your local network, not the public internet. Accept it and continue.
