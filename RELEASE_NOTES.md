@@ -1,5 +1,30 @@
 # DMXSmartLink Release Notes
 
+## 2026.09.12 — MIDI controllers, and a one-command Pi install
+
+### MIDI (new)
+
+- **Plug in a USB MIDI controller and it works.** Nothing to install, no driver to find. Pads recall your scenes in order, a fader on CC 7 rides the level, and CC 20/21 step through scenes.
+- **Adjustable if your controller sends something different** — Settings → MIDI controller lets you set the note the first pad sends, which fader rides the level, which buttons step scenes, and a channel filter so you can share a controller with a keyboard rig without every note firing a scene. The page also shows which controller it can see.
+
+### Installing on a Raspberry Pi is now one command
+
+```
+cd ~ && curl -fsSL https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest/download/setup.sh -o setup.sh && sudo bash setup.sh
+```
+
+That is the whole install — the script fetches the right build for your machine itself. Nothing to unpack, no release to pick from.
+
+### Licensing
+
+- Fixed a case where changing the computer's clock could affect an expired licence. Expiry is now judged against a time that only ever moves forward, and a machine whose clock is wrong or unset — a Pi with no battery, for instance — no longer has trouble validating a good licence.
+
+### Fixture library
+
+- Now ships **12,896 fixture profiles**.
+
+---
+
 ## 2026.09.12 — Follow Spot, and backups
 
 ### Follow Spot (new)
