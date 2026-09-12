@@ -55,9 +55,12 @@ out, it is there so a stolen code cannot be spread around.
 **Re-activating the same machine is free.** If you reinstall, or run activation twice by accident, you
 get the *same* licence back. It does not use up one of your three.
 
-**Your licence never phones home.** After activation the hub checks the licence entirely on its own
-machine. It does not need internet to start, to run, or to keep running — a hub on an isolated
-network is a normal way to use this, not a workaround.
+**Your licence is checked on your own machine.** The key decides, and it is verified locally — the
+hub does not need internet to start, to run, or to keep running, and an isolated network is a normal
+way to use this rather than a workaround.
+
+If the hub does have internet it checks in with us every couple of days, which is how a key turning
+up somewhere it should not be gets spotted. A check-in that cannot be made changes nothing.
 
 **Replacing a dead SD card on a Pi.** Move the card to a new board and it keeps working — the machine
 identity follows the card, not the board. A genuinely new install uses one of your three activations.

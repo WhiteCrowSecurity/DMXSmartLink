@@ -103,9 +103,13 @@ There is no cloud account and no hosted database. See
 
 ## Licensing, and what it does *not* do
 
-Your licence is checked **entirely on your own machine**. The hub does not call home — not at
-startup, not periodically, not ever. A hub on a network with no internet at all is a normal way to
-run this.
+Your licence is checked **entirely on your own machine** — the key itself decides, verified locally,
+with no server involved. **A hub with no internet runs indefinitely**, and that is a supported way to
+use it, not a workaround.
+
+When the hub *does* have internet it checks in with the licence server every couple of days, which is
+how a key being used somewhere it should not be gets noticed. If that check-in cannot be made,
+nothing happens: the hub carries on running on its valid key.
 
 Activation needs internet once, and even that has a manual path for a machine that has none. See
 [Activate your licence](SOP-ACTIVATE-A-LICENCE.md).

@@ -242,7 +242,7 @@ graph TB
     HUB4["DMX Smart Link hub"]
     HUB4 --> D1["Your local network"]
     HUB4 --> D2["A USB DMX interface<br/>(only for DMX fixtures)"]
-    HUB4 -.->|"only to activate,<br/>and to check for updates"| D3["The internet"]
+    HUB4 -.->|"activation, updates,<br/>and a licence check-in<br/>- none of them required"| D3["The internet"]
 
     classDef opt stroke-dasharray: 5 5
     class D3 opt
@@ -250,9 +250,13 @@ graph TB
     class HUB4 hub
 ```
 
-The dashed line is the point. Your licence is verified **on your own machine** — the hub does not
-call home at startup, periodically, or ever. A hub on a network with no internet is a normal way to
-run this, not a workaround.
+The dashed line is the point. Your licence is verified **on your own machine**: the key decides, it
+is checked locally, and a hub with no internet runs indefinitely. That is a supported way to use it,
+not a workaround.
+
+With internet, the hub also checks in with the licence server every couple of days — that is how a
+key used somewhere it should not be is noticed. The check-in is not a gate: if it cannot be made, the
+hub keeps running on its valid key, and only an explicit rejection stops it.
 
 ---
 
