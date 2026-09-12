@@ -55,10 +55,22 @@ ifconfig
 ---
 
 ### 3. Run the Setup Script
-You only need `setup.sh` in the home directory of the `dmx` user.  
-The installer will **download/sync everything it needs from the GitHub repo** automatically (no manual file copying required).
 
-Open a terminal and run:
+Log in as the `dmx` user and run **one command**:
+
+```
+cd ~ && curl -fsSL https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest/download/setup.sh -o setup.sh && sudo bash setup.sh
+```
+
+That is the whole install. The script downloads the right build for your machine by itself, so there
+is nothing to unpack and no release page to choose from. It takes 15-30 minutes, mostly unattended.
+
+**Run it from the home folder.** The `cd ~` matters: the script works out which user to install for
+from the folder it is sitting in, so running it from `/tmp` or `Downloads` installs to the wrong
+place.
+
+<details>
+<summary>If you already downloaded setup.sh by hand</summary>
 
 ```
 sudo su
@@ -66,6 +78,7 @@ cd /home/dmx
 chmod +x setup.sh
 ./setup.sh
 ```
+</details>
 
 ---
 
