@@ -107,6 +107,31 @@ you are using the machine's network address, not `127.0.0.1`.
 Check Settings → DMX USB: is your interface listed and selected? Then check the fixture's DMX address
 matches what you patched. The DMX Patch page shows what is assigned where.
 
+You do not need to restart the hub after plugging a USB DMX interface in — it watches for one and
+picks it up on its own, so you can unplug and reconnect mid-show and it will come back.
+
 **Lights flicker.**
 Most often this is the same physical USB interface being used for both input and output. Use
 different devices, or turn input off.
+
+**The fixture's address display is blinking.**
+On most fixtures a blinking address panel means "no DMX signal" and a solid one means the signal
+is present — so it is telling you about the wire, not about the fixture. Check that the hub is
+running, that your USB DMX interface is selected in Settings, and that the cable goes into the
+fixture's **IN** socket. If the panel still blinks, set the output protocol explicitly in
+Settings → *DMX USB Device Configuration* rather than leaving it on auto-detect; Enttec-compatible
+adapters identify themselves inconsistently, particularly on Windows.
+
+**After a power cut or restart, does the rig come back?**
+Yes. The hub blacks out every universe on startup to clear any latched fixture state, then restores
+the scene that was active before the restart — so you do not have to walk to the booth after a blip.
+It waits for your DMX interface to actually come up first, rather than guessing at a delay.
+
+Two things it deliberately will **not** do:
+
+- **Override a rig that is already lit.** It only rescues a rig that came up dark, so it cannot
+  take the lights off you mid-service or fight a console that is already driving the rig.
+- **Relight a room you turned off on purpose.** Turning everything off is not the same as never
+  having set a scene, and the hub tells the difference.
+
+If you would rather a hub always came up dark, turn off **Restore scene on start** in Settings.
