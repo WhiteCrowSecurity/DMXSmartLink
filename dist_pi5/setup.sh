@@ -865,7 +865,12 @@ write_service() {
   cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=DMXSmartLink Dashboard Service
-After=network.target docker.service
+# time-sync.target matters on a Raspberry Pi: it has no RTC, so systemd restores the clock from
+# fake-hwclock at boot and timesyncd then STEPS it to real time once the network is up -- by the
+# length of the downtime. Starting before that step lands means any wall-clock duration measured
+# across it is wrong. Wants= (not Requires=) so a hub with no internet still starts.
+After=network.target time-sync.target docker.service
+Wants=time-sync.target
 Requires=docker.service
 
 [Service]
