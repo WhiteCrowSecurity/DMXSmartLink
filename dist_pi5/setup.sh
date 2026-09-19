@@ -36,7 +36,7 @@ ROOT_UPDATE_LAUNCHER="/usr/local/sbin/dmxsmartlink-update-launcher"
 PYTHON_BIN=""
 
 # ---------------- Official Govee plugin repo ----------------
-GOVEE_PLUGIN="@homebridge-plugins/homebridge-govee@latest"
+GOVEE_PLUGIN="@homebridge-plugins/homebridge-govee@11.39.0"
 GOVEE_REPO="github:homebridge-plugins/homebridge-govee#latest"
 
 log() { echo -e "$*"; }
@@ -338,18 +338,161 @@ except Exception:
     apt_install rsync
   fi
 
-  # Copy EVERYTHING from the extracted dist folder into the install directory.
-  # Exclusions prevent clobbering user data and venv.
-  rsync -a --delete \
+  # DMXSL-SYNC-BEGIN (do not remove: V38/src/test/installer_sync_harness.sh executes this block verbatim)
+  # Never delete what we did not ship (installer data loss, 2026-09-18).
+  #
+  # This was `rsync -a --delete` with an exclude list naming five user files. --delete removes
+  # everything in the install directory that is not in the new dist, so every run destroyed every
+  # data file nobody had remembered to add to that list. A customer lost his entire DMX patch
+  # (fixtures.json); scenes.json, the scenes/ directory, followspot.json, the TLS certificate pair
+  # and the licence token were all equally exposed, and none of them were listed.
+  #
+  # Enumerating user data does not survive a growing product. This product had two such lists --
+  # here, and PRESERVE_FILES in main.py -- and they were incomplete in different ways, which is the
+  # proof. So the rule is inverted: track what WE ship, in .dist_manifest, and touch nothing else.
+  #
+  #   a file we shipped before and no longer ship  -> removed   (what --delete was for)
+  #   a file we ship now                           -> installed
+  #   anything else                                -> left alone: never overwritten, never deleted
+  #
+  # A data file added to the app is therefore safe the day it is written, with no list to update.
+  # On Linux the app's data directory IS the install directory (config_loader.data_dir() returns
+  # cwd), which is why user data sits in here at all.
+
+  NEW_MANIFEST="$TEMP_DIR/dist_manifest.new"
+  OLD_MANIFEST="$TARGET_DIR/.dist_manifest"
+  TARGET_LIST="$TEMP_DIR/target_files.txt"
+  PROTECT_FILE="$TEMP_DIR/protect.txt"
+
+  ( cd "$SRC_DIR" && find . -mindepth 1 \( -type f -o -type l \) -printf '%P\n' ) \
+    | LC_ALL=C sort > "$NEW_MANIFEST"
+
+  # Safety net, before anything destructive: copy everything the new dist does not contain out of
+  # the way and say where it went. The next time an exclusion is wrong, this is the difference
+  # between a bug and a catastrophe.
+  #
+  # Two rules, both learned the hard way:
+  #
+  #   1. REFUSE BEFORE THE FIRST WRITE if there is not room for the snapshot AND the payload. The
+  #      first version of this had no space check, so on a full disk every copy failed silently, the
+  #      path was printed anyway and the sync proceeded regardless -- a half-written snapshot beside
+  #      a half-updated install, which is worse than the data loss it was added to prevent. The
+  #      snapshot roughly doubles the peak space an update needs, so a customer's fuller Pi meets
+  #      this long before our lab does.
+  #   2. NEVER HIDE A COPY FAILURE. Discarding cp's stderr keeps a snapshot failure from aborting an
+  #      install, which was the intent, but it also makes an incomplete snapshot indistinguishable
+  #      from a complete one. An incomplete snapshot is precisely the situation in which proceeding
+  #      is unsafe, so it now stops -- before anything in the install has been touched.
+  #
+  # The Home Assistant pre-flight below (HA_MIN_FREE_MB / _ha_free_mb) already worked this way. A
+  # companion integration had a space check and a clear refusal while the customer's fixture patch
+  # had neither; this closes that gap using the same helper.
+
+  SNAPSHOT_DIR="$HOME_DIR/dmxsmartlink-preupdate-$(date -u +%Y%m%dT%H%M%SZ)"
+  SNAPSHOT_LIST="$TEMP_DIR/snapshot_entries.txt"
+  : > "$SNAPSHOT_LIST"
+  if [[ -d "$TARGET_DIR" ]]; then
+    while IFS= read -r entry; do
+      [[ -z "$entry" ]] && continue
+      case "$entry" in .venv|__pycache__|logs) continue ;; esac
+      [[ -e "$SRC_DIR/$entry" ]] || printf '%s\n' "$entry" >> "$SNAPSHOT_LIST"
+    done < <( cd "$TARGET_DIR" && find . -mindepth 1 -maxdepth 1 -printf '%P\n' )
+  fi
+
+  # Pre-flight. Nothing above this point has written to the install directory.
+  SNAP_MB=0
+  if [[ -s "$SNAPSHOT_LIST" ]]; then
+    SNAP_MB=$(while IFS= read -r e; do
+                [[ -n "$e" ]] && du -sm "$TARGET_DIR/$e" 2>/dev/null | awk '{print $1}'
+              done < "$SNAPSHOT_LIST" | awk '{s+=$1} END {print s+0}')
+  fi
+  PAYLOAD_MB=$(du -sm "$SRC_DIR" 2>/dev/null | awk '{print $1+0}')
+  REQUIRED_MB=$(( SNAP_MB + PAYLOAD_MB + UPDATE_FREE_MARGIN_MB ))
+  FREE_MB="$(_ha_free_mb "$TARGET_DIR")"            # same df -Pm helper the HA pre-flight uses
+  if [[ -n "$FREE_MB" ]] && (( FREE_MB < REQUIRED_MB )); then
+    log "ERROR: not enough free disk space to update safely."
+    log "    Needs about ${REQUIRED_MB} MB: ${SNAP_MB} MB to copy your existing data,"
+    log "    ${PAYLOAD_MB} MB for the update, and ${UPDATE_FREE_MARGIN_MB} MB spare."
+    log "    Only ${FREE_MB} MB is free on $TARGET_DIR."
+    log "    NOTHING HAS BEEN CHANGED. Free up space and run this again."
+    rm -rf "$TEMP_DIR" "$TARBALL_PATH" "$ZIP_PATH"
+    exit 1
+  fi
+
+  if [[ -s "$SNAPSHOT_LIST" ]]; then
+    mkdir -p "$SNAPSHOT_DIR"
+    snap_expected=$(grep -c . "$SNAPSHOT_LIST")
+    snap_ok=0
+    snap_failed=""
+    while IFS= read -r entry; do
+      [[ -z "$entry" ]] && continue
+      if cp -a "$TARGET_DIR/$entry" "$SNAPSHOT_DIR/" 2>>"$TEMP_DIR/snapshot_errors.txt"; then
+        snap_ok=$(( snap_ok + 1 ))
+      else
+        snap_failed="$snap_failed $entry"
+      fi
+    done < "$SNAPSHOT_LIST"
+    # Stopping here is safe ONLY because it happens before the first write: the install is still
+    # exactly as the customer left it, so a refusal costs them nothing. Do NOT extend this to
+    # failures after the sync has begun. Past that point a safety net that aborts breaks the thing
+    # it exists to protect, and a half-updated install is the harm, not the remedy. The asymmetry
+    # is deliberate; it is not an oversight to tidy up.
+    # The success message is EARNED BY THE COUNT MATCHING what we set out to copy -- never by the
+    # directory merely being non-empty. The first version tested only that the directory had
+    # something in it, which gave two silent modes: one file landing out of fifty printed the same
+    # "saved" line as a complete snapshot (partial failure LIED), and a run where every copy failed
+    # left an empty directory that was then removed, telling the customer nothing at all (total
+    # failure was MUTE). Counting catches both, including causes we have not predicted -- today's
+    # was permissions, next week's will be something else.
+    if [[ -n "$snap_failed" || "$snap_ok" -ne "$snap_expected" ]]; then
+      log "ERROR: could not save a complete copy of your existing data."
+      log "    Saved ${snap_ok} of ${snap_expected}.${snap_failed:+ Could not save:${snap_failed}}"
+      log "    Partial copy left at: $SNAPSHOT_DIR"
+      [[ -s "$TEMP_DIR/snapshot_errors.txt" ]] && log "    $(head -3 "$TEMP_DIR/snapshot_errors.txt" | tr '\n' ' ')"
+      log "    NOTHING IN YOUR INSTALL HAS BEEN CHANGED. Fix the problem above and run this again."
+      exit 1
+    fi
+    # The hub runs as $USER_NAME and must be able to PRUNE and clean these snapshots up from the
+    # UI, not merely read them (#167). cp -a as root preserves each FILE's original owner, but
+    # mkdir leaves the DIRECTORY root-owned: that permits read, list and restore while forbidding
+    # delete, rename and write. The combination looks entirely correct in testing and then fails
+    # later, in production, at retention. Do not remove this on the grounds that nothing writes
+    # into that directory -- the point is that something must be able to remove it.
+    chown -R "$USER_NAME:$USER_NAME" "$SNAPSHOT_DIR" 2>/dev/null || true
+    log "    Saved a copy of your existing data to: $SNAPSHOT_DIR (${snap_ok} of ${snap_expected} items)"
+  else
+    log "    No existing data to copy (fresh install)."
+  fi
+
+  : > "$PROTECT_FILE"
+  if [[ -f "$OLD_MANIFEST" ]]; then
+    ( cd "$TARGET_DIR" && find . -mindepth 1 \( -type f -o -type l \) -printf '%P\n' ) \
+      | grep -v -e '^\.venv/' -e '^__pycache__/' -e '/__pycache__/' \
+      | LC_ALL=C sort > "$TARGET_LIST"
+    # Present but never shipped by us: the user's. Protect from overwrite as well as from deletion,
+    # which is also how a shipped default seeds only when it is absent.
+    # comm needs sorted input and fails quietly without it, so never trust the stored order.
+    LC_ALL=C sort "$OLD_MANIFEST" > "$TEMP_DIR/dist_manifest.old"
+    LC_ALL=C comm -23 "$TARGET_LIST" "$TEMP_DIR/dist_manifest.old" | sed 's|^|/|' > "$PROTECT_FILE"
+    # Shipped last time, not shipped now: genuinely stale, so remove it.
+    LC_ALL=C comm -23 "$TEMP_DIR/dist_manifest.old" "$NEW_MANIFEST" | while IFS= read -r stale; do
+      [[ -n "$stale" ]] && rm -f "$TARGET_DIR/$stale"
+    done
+  else
+    # No manifest yet (fresh box, or the first upgrade onto this scheme): we cannot tell our files
+    # from the user's, so delete nothing at all and keep the historical protections as a floor.
+    printf '/%s\n' .install_arch config.json devices.json groups.json dev_mode update_channel \
+      > "$PROTECT_FILE"
+  fi
+
+  rsync -a \
     --exclude=".venv/" \
     --exclude="__pycache__/" \
-    --exclude=".install_arch" \
-    --exclude="config.json" \
-    --exclude="devices.json" \
-    --exclude="groups.json" \
-    --exclude="dev_mode" \
-    --exclude="update_channel" \
+    --exclude-from="$PROTECT_FILE" \
     "$SRC_DIR/" "$TARGET_DIR/"
+
+  cp "$NEW_MANIFEST" "$OLD_MANIFEST"
+  # DMXSL-SYNC-END
   log "    âœ“ Sync complete"
 
   # Clean up temp download directory
@@ -606,6 +749,16 @@ start_homebridge() {
 HA_IMAGE="ghcr.io/home-assistant/home-assistant:stable"
 MATTER_IMAGE="ghcr.io/home-assistant-libs/python-matter-server:stable"
 HA_MIN_FREE_MB=4500
+
+# Spare megabytes an update must leave free, on top of the snapshot and the payload. Same spirit as
+# HA_MIN_FREE_MB above; tunable so the installer test can exercise the refusal on a real filesystem.
+#
+# 256 is a measured floor rather than a guess. The known-good lab install of 2026-09-18 ran with
+# 1345 MB free, wrote a 562 MB snapshot, and carried a 134 MB compressed Pi payload -- roughly
+# 600 MB of real headroom beyond snapshot plus payload. 256 sits well inside that proven-good case
+# while staying small enough not to refuse an update that would have succeeded. If a customer
+# refusal ever turns out to be a false positive, those are the numbers to adjust against.
+UPDATE_FREE_MARGIN_MB="${UPDATE_FREE_MARGIN_MB:-256}"
 
 _ha_free_mb() { df -Pm "$1" 2>/dev/null | awk 'NR==2{print $4}'; }
 
@@ -1008,6 +1161,7 @@ install_docker
 add_user_to_docker
 start_homebridge                # Starts with DBus exposed into container
 install_govee_plugin            # Installs plugin + BLE deps + setcap inside container
+bash "$TARGET_DIR/scripts/scene-plugin/install.sh" --bundle "$TARGET_DIR/scripts/scene-plugin/runtime.zip" --apply
 ensure_home_assistant           # Home Assistant + Matter Server containers (hub onboards HA itself)
 write_service
 configure_passwordless_sudo     # Allow service user to restart service without password

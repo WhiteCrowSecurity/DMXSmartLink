@@ -75,7 +75,7 @@ detect_dist_dir() {
 DIST_DIR="$(detect_dist_dir)"
 
 # ---------------- Official Govee plugin repo ----------------
-GOVEE_PLUGIN="@homebridge-plugins/homebridge-govee@latest"
+GOVEE_PLUGIN="@homebridge-plugins/homebridge-govee@11.39.0"
 GOVEE_REPO="github:homebridge-plugins/homebridge-govee#latest"
 
 # Files to preserve during upgrade (same as in main.py)
@@ -964,6 +964,7 @@ realign_service_workdir
 
 # Update Homebridge
 update_homebridge
+bash "$TARGET_DIR/scripts/scene-plugin/install.sh" --bundle "$TARGET_DIR/scripts/scene-plugin/runtime.zip" --apply
 # Home Assistant + Matter Server (create if missing, refresh if present)
 ensure_home_assistant
 # Wi-Fi / Ethernet control from the web UI, and the boot-to-hub kiosk on Pis with a screen

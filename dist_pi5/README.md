@@ -153,10 +153,10 @@ Close the browser tab.
 
 ### 11. License Setup
 1. Return to **DMX Smart Link**
-2. Click **Manage Config**
+2. Click **Settings**
 3. Paste your license key
 4. Enter Homebridge username and password
-5. Click **Update Config**
+5. Click **Save settings**
 6. Confirm license status shows:
 ```
 Valid: Expires on ...
