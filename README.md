@@ -3,7 +3,7 @@
 **Drive smart lights from your lighting desk, and drive your stage lights from anything.**
 
 DMX Smart Link is a lighting hub that speaks DMX on one side and smart-home lights on the
-other. Patch your Govee, Alexa or Hue lights as DMX fixtures and control them from the
+other. Patch your Govee or Alexa lights as DMX fixtures and control them from the
 lighting software you already use — or run the whole show from the hub itself.
 
 Tutorials: https://www.youtube.com/@WhiteCrowSecurity
