@@ -1,21 +1,104 @@
-# DMX Smart Link – Installation Instructions
+# DMX Smart Link
 
-Best tutorials for the product:  
-`https://www.youtube.com/@WhiteCrowSecurity`
+**Drive smart lights from your lighting desk, and drive your stage lights from anything.**
 
----
+DMX Smart Link is a lighting hub that speaks DMX on one side and smart-home lights on the
+other. Patch your Govee, Alexa or Hue lights as DMX fixtures and control them from the
+lighting software you already use — or run the whole show from the hub itself.
 
-## What DMX Smart Link is
-
-DMX Smart Link is software that bridges **DMX software** (Art-Net / DMX universes) with **SmartLights** via Homebridge, so you can control SmartLights from your DMX controller/software.
-
-It also includes:
-- **AI Light Show (Audio Reactive)** (new): an audio-reactive show mode inside the dashboard.
-- **Visual Control**: manual DMX/fixture/group controls for testing and setup.
+Tutorials: https://www.youtube.com/@WhiteCrowSecurity
 
 ---
 
-## Install on Windows 11 (one-click) — new!
+## What you can do with it
+
+**Bridge smart lights into DMX.** Smart bulbs, strips and bars appear as ordinary DMX
+fixtures. Your desk sends DMX; they respond. Art-Net or sACN in, smart lights out.
+
+**Control real fixtures too.** Moving heads, washes, pars and profile spots over Art-Net or
+a USB DMX interface — the hub is a full lighting controller, not only a bridge. sACN is
+supported as an input, so a desk speaking sACN can drive the hub.
+
+**Visual Control.** Point-and-click control of any fixture or group: colour, brightness,
+colour temperature, pan and tilt, strobe, gobos and effects. Controls appear based on what
+each fixture can actually do.
+
+**Scenes and groups.** Save a look and recall it instantly from the hub, a phone, a Stream
+Deck or a MIDI controller. Group fixtures so one fader moves twelve lights.
+
+**AI Light Show.** Audio-reactive shows that follow the music, using the fixtures and
+groups you choose.
+
+**AI Slide Show.** Lighting that follows images and presentations.
+
+**Follow Spot.** Track a performer across the stage with saved stage positions, driven from
+a phone, a MIDI surface or a Stream Deck.
+
+**NDI video follow.** Lights take their colour from a live video feed, so stage washes match
+what's on screen. Includes a visible stop control that leaves the lights where they are.
+
+**Media Player.** Play audio through the hub and drive the show from it.
+
+**Stream Deck and MIDI.** Recall scenes, trigger shows and run the follow spot from physical
+buttons and faders. Apps for Windows and macOS are included with every release.
+
+**Network Logs.** See exactly what the hub is sending and receiving when something looks wrong.
+
+---
+
+## The fixture library
+
+**16,475 fixtures from 1,697 manufacturers, with 56,465 modes**, shipped with the app and
+kept up to date every release. Includes **6,987 moving heads**.
+
+Patch a fixture and its channels are mapped for you. Import an existing patch from a CSV and
+the manufacturer, model and channel layout come with it.
+
+**Channel Check** — for anything the library doesn't know. Send a value to a single channel,
+watch what your light does, and save what works. No chart, no manual, no support ticket. A
+value you set by looking at the fixture beats any data we hold, because you saw it.
+
+**Moving lights open their shutter automatically** where the manufacturer data says how.
+Where it doesn't, the fixture is left exactly as it is rather than guessed at, so nothing
+starts flashing unexpectedly.
+
+---
+
+## Requirements
+
+| Platform | Needs |
+|---|---|
+| **Windows 11** | One installer. Nothing else to set up. |
+| **macOS** | One installer package. Apple Silicon and Intel. |
+| **Raspberry Pi 5** | Recommended for permanent installs. 4 GB RAM. |
+| **Ubuntu / Linux** | 2 CPUs, 4 GB RAM, internet during install. |
+
+A licence key enables DMX output. Smart-light control runs through Homebridge, which the
+installers set up for you.
+
+---
+
+## ⚠️ Photosensitivity and seizure warning
+
+Lighting software can produce flashing, strobing and rapidly changing light. A small number
+of people may experience seizures, loss of awareness or other adverse effects when exposed
+to flashing lights or patterns, including people with no previous history of epilepsy.
+
+**You are responsible for validating any show, scene or effect before running it in front of
+an audience.** Test your programming in the venue, with your own fixtures, before anyone is
+present. Warn your audience where flashing effects are used, and provide a way for people to
+avoid or leave the space.
+
+DMX Smart Link sends the instructions you give it to the fixtures you have patched. It cannot
+know what your lights will physically do, and it is not a substitute for your own testing and
+judgement.
+
+---
+
+# Installation
+
+
+## Install on Windows 11 (one-click)
 
 On Windows, DMX Smart Link installs from a single file — no Python, Docker, or Node.js to set up. Everything (the app, the audio engine, and the Homebridge + Govee integration) is bundled in the installer.
 
@@ -28,11 +111,25 @@ On Windows, DMX Smart Link installs from a single file — no Python, Docker, or
 
 ---
 
+## Install on macOS
+
+1. **Download:** https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest/download/DMXSmartLink-Installer.pkg
+2. **Run it.** macOS may warn it is from an unidentified developer → right-click the package
+   → *Open* → *Open*. The installer places the app and its bundled Homebridge integration.
+3. **Launch** DMXSmartLink from Applications. The hub is reachable on your network at
+   `https://<this-mac-ip>:5000`.
+4. **First run:** enter your licence key to enable DMX output, and sign in to your smart-light
+   account in the Homebridge UI (`http://localhost:8581`).
+
+Apple Silicon and Intel are both supported.
+
+---
+
 ## Raspberry Pi 5 / Ubuntu (Linux)
 
 The steps below are for a Raspberry Pi 5 or Ubuntu install.
 
-## System Requirements
+## Linux System Requirements
 
 - Raspberry Pi 5 (recommended)
 - Ubuntu Server or Virtual Machine
@@ -44,6 +141,10 @@ The steps below are for a Raspberry Pi 5 or Ubuntu install.
 Username: dmx
 Password: dmx
 ```
+
+**Change this password before the machine is reachable from anywhere but your bench.**
+These are the documented defaults for a fresh image, which means everyone knows them.
+Run `passwd` on first login.
 
 ---
 
