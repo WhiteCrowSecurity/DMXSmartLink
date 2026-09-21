@@ -1,5 +1,37 @@
 # DMXSmartLink Release Notes
 
+## 2026.09.21.1444 — Scenes, saved shows and controller integrations
+
+[Downloads and full release](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/tag/DMXSmartLink-v2026.09.21.1444) · [Feature guide](docs/FEATURES.md)
+
+### Scenes and lighting control
+
+- Scene saving captures the whole rig using Homebridge or Home Assistant accessory state, regardless of selection. Clearer warnings identify lights whose state or active color mode is unavailable.
+- Scene recall changes only the lights and values that need changing, with individual-light priority where groups overlap.
+- Single-light controls stay scoped to the selected lights. Govee color commands are batched to avoid intermediate Hue/Saturation commands, and returning to the same RGB color after a temperature change works correctly.
+- Provider state updates after commands without continuous status polling. Color-mode evidence is retained across controller restarts.
+
+### Easier controls
+
+- Hold and drag to select lights on desktop or touchscreens; Shift-drag remains available.
+- Improved brightness labels, mixed-state indicators, Help layout, and mobile update controls.
+- Saved AI Light Show, Slideshow and NDI setups; ordered slideshow playlists and resource checks before starting output.
+- NDI audio/input fixes, CSV import feedback, Favorites and Follow Spot improvements.
+- Windows and macOS MIDI-over-IP and Stream Deck connector downloads in Settings.
+
+### Fixture library
+
+16,827 bundled fixture profiles, including 34 new additions in this release batch.
+
+### Updating
+
+Back up your settings. In Dashboard → Updates, choose the Latest channel, select Check for Updates, then Update Now. Let installation and restart finish, then confirm version **2026.09.21.1444**. Windows and macOS installers are also available below; connector downloads remain in Settings.
+
+Test saved scenes and your connected hardware before an event. The intermittent fixture-display flashing report remains under investigation and is not claimed fixed in this release.
+
+
+---
+
 ## 2026.09.12 — Licensing housekeeping
 
 Nothing changes in how the hub behaves for you. This release removes an outside

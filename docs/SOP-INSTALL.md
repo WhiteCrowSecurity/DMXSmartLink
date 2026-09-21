@@ -1,137 +1,76 @@
-# Install DMX Smart Link
+# Install DMXSmartLink Hub
 
-**How long:** 15–30 minutes on a Raspberry Pi (most of it unattended), a few minutes on Windows or
-macOS.
-
-Pick your platform below. Whichever you choose, you will finish with a hub you reach from a browser
-at `https://<the machine's address>:5000`.
-
----
+Use the [Latest release](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest) for a production installation. The current packages cover Raspberry Pi 5 ARM64, Ubuntu x86-64, Windows x64 and Apple silicon macOS. The current Mac package is not an Intel Mac build.
 
 ## Before you start
 
-**You will need a USB-to-DMX interface** to drive DMX fixtures — an FTDI-based device (a DMX USB Pro
-or compatible). Smart lights over Wi-Fi do not need one.
+Use a supported system with adequate free storage for installation, media and future updates. For Linux, plan for at least 2 CPU cores and 4 GB RAM. Internet access is needed to download the package and required setup components.
 
-**Give the machine a fixed address.** Reserve its IP on your router, or set a static address. You
-will be typing this address on phones and saving it in Stream Deck buttons; you do not want it moving.
+A USB DMX adapter is needed only for a USB DMX connection. Network DMX output uses compatible network devices; smart lights use their configured provider. Check the specific adapter's input/output capabilities before buying it.
 
----
-
-## Raspberry Pi or Ubuntu
-
-A Raspberry Pi 5 is the usual choice. A Pi 4 works.
-
-1. Install Raspberry Pi OS (64-bit) or Ubuntu, and make sure you can log in over SSH.
-2. Log in, and run **one command**:
-
-   ```bash
-   cd ~ && curl -fsSL https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest/download/setup.sh -o setup.sh && sudo bash setup.sh
-   ```
-
-   That is the whole install. The script downloads the right build for your machine by itself —
-   there is nothing to unpack and no release page to pick from.
-
-3. Leave it alone. It installs Python packages into a virtual environment, sets up Docker and
-   Homebridge for smart-light support, and creates a `dmxsmartlink` systemd service.
-4. When it finishes, open `https://<pi-address>:5000` in a browser.
-
-> **Run it from your home folder.** The `cd ~` matters: the script works out which user to install
-> for from the folder it is sitting in. Running it from `/tmp` or `Downloads` will install to the
-> wrong place.
-
-Your browser will warn about the certificate. That is expected — the hub generates its own, because
-it serves your local network, not the public internet. Accept it and continue.
-
-**Useful commands afterwards:**
-
-```bash
-sudo systemctl status dmxsmartlink     # is it running?
-sudo systemctl restart dmxsmartlink    # restart it
-sudo journalctl -u dmxsmartlink -f     # watch the log
-```
-
----
+Reserve the Hub's local IP address on your router so phones and controllers can find it consistently. Export a backup before replacing an existing installation.
 
 ## Windows
 
-1. Download the Windows installer from the
-   [Releases page](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases).
-2. Run it and follow the prompts.
-3. Launch DMX Smart Link. It opens your browser at `https://127.0.0.1:5000`.
+1. Download [DMXSmartLink-Setup.exe](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest/download/DMXSmartLink-Setup.exe).
+2. Run the installer and follow its prompts. It includes the application and bundled Homebridge components.
+3. Launch DMXSmartLink from its shortcut. Enter your licence and configure the provider in Settings.
+4. For access from a phone or another computer, use `https://<pc-address>:5000` on your local network. Use the installed firewall rules for Hub access.
 
-Your settings and data live in `C:\ProgramData\DMXSmartLink`.
-
-To reach the hub from a phone, use the PC's network address — `https://192.168.1.50:5000` or similar
-— and allow DMX Smart Link through Windows Firewall when prompted.
-
----
+This release's installer, installed backend and same-version reinstall were tested on Windows 11. Export your settings before uninstalling; uninstall is not an update procedure.
 
 ## macOS
 
-1. Download the `.pkg` from the
-   [Releases page](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases).
-2. Open it and follow the installer.
-3. Launch **DMX Smart Link** from Applications. It opens your browser automatically.
+1. Download the [Apple silicon installer package](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest/download/DMXSmartLink-Installer.pkg).
+2. Run the installer and follow its prompts.
+3. Open DMXSmartLink from Applications, enter your licence and configure the provider in Settings.
+4. Other devices on your local network can access `https://<mac-address>:5000`.
 
-Your settings and data live in `~/Library/Application Support/DMXSmartLink`.
+This release was installed and its native backend tested on an M4 Mac. Verify that a download matches your Mac architecture; do not use this package as an Intel build.
 
----
+## Raspberry Pi 5 or Ubuntu
 
-## First run
+Install an appropriate 64-bit OS and sign in as the intended Hub user. From that user's home directory, run:
 
-1. **Activate your licence** — see [Activate your licence](SOP-ACTIVATE-A-LICENCE.md).
-2. **Set the DMX USB device.** Settings → *DMX USB Device Configuration* → choose your interface and
-   its output universe. Leave it on auto-detect if you only have one.
-3. **Patch your fixtures.** Fixtures → add each light from the built-in library (over 12,000
-   fixtures) and give it a DMX address.
-4. **Lay out the stage.** Visual Control → drag each fixture to roughly where it is in the room. This
-   is what makes the rest of the app make sense at a glance.
-5. **Save a scene** once it looks right.
-6. **Take a backup** — see [Back up and restore](SOP-BACKUP-AND-RESTORE.md). Do this before you need
-   it.
+```bash
+cd ~ && curl -fsSL https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest/download/setup.sh -o setup.sh && sudo bash setup.sh
+```
 
----
+The setup script downloads the matching package and configures the service. Run it from the intended user's home folder, allow it to finish, then open `https://<hub-address>:5000`.
 
-## Common problems
+The local Hub uses a local certificate. Confirm you are connecting to your own Hub before accepting a browser certificate warning. Use your OS account's credentials; a generic OS installation does not automatically have a `dmx` account or password.
 
-**The browser says the connection is not private.**
-Expected. The hub uses a self-signed certificate because it serves your local network. Continue past
-the warning. It is encrypted; it is simply not signed by a public authority.
+Useful service diagnostics:
 
-**I cannot reach it from my phone.**
-The phone must be on the same network as the hub, and on Windows the firewall must allow it. Check
-you are using the machine's network address, not `127.0.0.1`.
+```bash
+sudo systemctl status dmxsmartlink
+sudo journalctl -u dmxsmartlink -n 100 --no-pager
+```
 
-**No DMX output.**
-Check Settings → DMX USB: is your interface listed and selected? Then check the fixture's DMX address
-matches what you patched. The DMX Patch page shows what is assigned where.
+Do not restart or update a Hub during a live service or show.
 
-You do not need to restart the hub after plugging a USB DMX interface in — it watches for one and
-picks it up on its own, so you can unplug and reconnect mid-show and it will come back.
+## Connect smart lights
 
-**Lights flicker.**
-Most often this is the same physical USB interface being used for both input and output. Use
-different devices, or turn input off.
+### Homebridge
 
-**The fixture's address display is blinking.**
-On most fixtures a blinking address panel means "no DMX signal" and a solid one means the signal
-is present — so it is telling you about the wire, not about the fixture. Check that the hub is
-running, that your USB DMX interface is selected in Settings, and that the cable goes into the
-fixture's **IN** socket. If the panel still blinks, set the output protocol explicitly in
-Settings → *DMX USB Device Configuration* rather than leaving it on auto-detect; Enttec-compatible
-adapters identify themselves inconsistently, particularly on Windows.
+Open **Homebridge UI** from the Hub and configure the relevant vendor integration. Confirm your light is visible and controllable in **Accessories**. Preserve the bundled Govee plugin version unless the release instructions recommend changing it. Only configure an Alexa plugin if your devices require that integration.
 
-**After a power cut or restart, does the rig come back?**
-Yes. The hub blacks out every universe on startup to clear any latched fixture state, then restores
-the scene that was active before the restart — so you do not have to walk to the booth after a blip.
-It waits for your DMX interface to actually come up first, rather than guessing at a delay.
+Enter the Homebridge connection details in Hub Settings, save, and refresh device inventory. Follow the vendor plugin's setup instructions for its account authentication.
 
-Two things it deliberately will **not** do:
+### Home Assistant
 
-- **Override a rig that is already lit.** It only rescues a rig that came up dark, so it cannot
-  take the lights off you mid-service or fight a console that is already driving the rig.
-- **Relight a room you turned off on purpose.** Turning everything off is not the same as never
-  having set a scene, and the hub tells the difference.
+Connect an existing Home Assistant instance through Hub Settings: enable the integration and enter its host, port and access token. Check the light entity in Home Assistant first, then refresh the Hub inventory. Enabling this connection does not by itself install Home Assistant or add every vendor integration.
 
-If you would rather a hub always came up dark, turn off **Restore scene on start** in Settings.
+Keep access tokens private. Provider compatibility and the available controls depend on the light's integration.
+
+## Start with one light
+
+1. Confirm the licence status and provider connection.
+2. Add a supported light or patch one DMX fixture in the correct mode.
+3. Check its universe, start address and full channel footprint.
+4. Use Visual Control to test brightness, color and temperature where supported.
+5. Save and recall a scene, then expand to the rest of the rig.
+
+Preserve an existing external USB DMX fanout patch: when one input frame is reused across universes, assigned channel ranges must not overlap across that fanout.
+
+Next: [Scenes and show setups](FEATURES.md), [Backup and restore](SOP-BACKUP-AND-RESTORE.md), [Update the Hub](SOP-UPDATE-THE-HUB.md).

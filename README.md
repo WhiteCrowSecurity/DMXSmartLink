@@ -1,392 +1,111 @@
-# DMX Smart Link
+# DMXSmartLink Hub
 
-**Drive smart lights from your lighting desk, and drive your stage lights from anything.**
+**Bring DMX fixtures and smart lighting together — from a lighting console, your browser, or an audio-reactive show.**
 
-DMX Smart Link is a lighting hub that speaks DMX on one side and smart-home lights on the
-other. Patch your Govee or Alexa lights as DMX fixtures and control them from the
-lighting software you already use — or run the whole show from the hub itself.
+DMXSmartLink combines visual lighting control, whole-rig scenes, AI Light Shows, presentation/video-driven lighting, and physical controller integrations. Use it for churches, theaters, live events, studios, gyms, venues, or smart-home lighting. Choose the capabilities your setup needs and start with a single light.
 
-Tutorials: https://www.youtube.com/@WhiteCrowSecurity
+[Shop and product information](https://dmxsmartlink.com) · [Download Latest](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest) · [Documentation](docs/README.md) · [Video tutorials](https://www.youtube.com/@WhiteCrowSecurity) · [Discord](https://discord.gg/pj6f54dpv7)
 
----
+## What's new in 2026.09.21.1444
 
-## What you can do with it
+- **Whole-rig scenes:** capture lights and fixtures regardless of selection, including off states, using Homebridge or Home Assistant accessory state for smart lights.
+- **Difference-only recall:** apply the values that need changing, with individual-light priority where groups overlap.
+- **Selected-light controls:** improved selection scope and Govee RGB/color-temperature switching, including returning to a previously used color.
+- **Easier Visual Control:** hold and drag to select on desktop or touchscreens; clearer brightness and mixed-state indicators, Help layout, and mobile update controls.
+- **Saved AI Light Show, Slideshow and NDI setups**, with slideshow playlists and resource checks before starting output.
+- **NDI input/audio fixes** and Windows/macOS **MIDI-over-IP and Stream Deck downloads** in Settings.
+- **16,827 bundled fixture profiles**, including **34 additions** in this release batch.
 
-**Bridge smart lights into DMX.** Smart bulbs, strips and bars appear as ordinary DMX
-fixtures. Your desk sends DMX; they respond. Art-Net or sACN in, smart lights out.
+Read the [release notes](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/tag/DMXSmartLink-v2026.09.21.1444) and [feature guide](docs/FEATURES.md) for behavior, setup and limitations.
 
-**Control real fixtures too.** Moving heads, washes, pars and profile spots over Art-Net or
-a USB DMX interface — the hub is a full lighting controller, not only a bridge. sACN is
-supported as an input, so a desk speaking sACN can drive the hub.
+## What you can control
 
-**Visual Control.** Point-and-click control of any fixture or group: colour, brightness,
-colour temperature, pan and tilt, strobe, gobos and effects. Controls appear based on what
-each fixture can actually do.
-
-**Scenes and groups.** Save a look and recall it instantly from the hub, a phone, a Stream
-Deck or a MIDI controller. Group fixtures so one fader moves twelve lights.
-
-**AI Light Show.** Audio-reactive shows that follow the music, using the fixtures and
-groups you choose.
-
-**AI Slide Show.** Lighting that follows images and presentations.
-
-**Follow Spot.** Track a performer across the stage with saved stage positions, driven from
-a phone, a MIDI surface or a Stream Deck.
-
-**NDI video follow.** Lights take their colour from a live video feed, so stage washes match
-what's on screen. Includes a visible stop control that leaves the lights where they are.
-
-**Media Player.** Play audio through the hub and drive the show from it.
-
-**Stream Deck and MIDI.** Recall scenes, trigger shows and run the follow spot from physical
-buttons and faders. Apps for Windows and macOS are included with every release.
-
-**Network Logs.** See exactly what the hub is sending and receiving when something looks wrong.
-
----
-
-## The fixture library
-
-**16,475 fixtures from 1,697 manufacturers, with 56,465 modes**, shipped with the app and
-kept up to date every release. Includes **6,987 moving heads**.
-
-Patch a fixture and its channels are mapped for you. Import an existing patch from a CSV and
-the manufacturer, model and channel layout come with it.
-
-**Channel Check** — for anything the library doesn't know. Send a value to a single channel,
-watch what your light does, and save what works. No chart, no manual, no support ticket. A
-value you set by looking at the fixture beats any data we hold, because you saw it.
-
-**Moving lights open their shutter automatically** where the manufacturer data says how.
-Where it doesn't, the fixture is left exactly as it is rather than guessed at, so nothing
-starts flashing unexpectedly.
-
----
-
-## Requirements
-
-| Platform | Needs |
+| Capability | What it does |
 |---|---|
-| **Windows 11** | One installer. Nothing else to set up. |
-| **macOS** | One installer package. Apple Silicon and Intel. |
-| **Raspberry Pi 5** | Recommended for permanent installs. 4 GB RAM. |
-| **Ubuntu / Linux** | 2 CPUs, 4 GB RAM, internet during install. |
+| DMX and smart lights | Bridge supported smart lights through **Homebridge and Home Assistant**, alongside patched DMX fixtures. Available controls depend on the device and integration. |
+| Console input | Receive Art-Net, sACN, or supported USB DMX input and route it through your configured patch. |
+| Fixture output | Control DMX fixtures through supported USB DMX interfaces or network output. USB input and output capabilities depend on the adapter. |
+| Visual Control | Arrange your rig on a map; adjust brightness, color, temperature, pan/tilt and fixture-specific controls. |
+| Scenes and groups | Save complete looks, recall changes, and organize lights. Overlapping groups must not override an individual light's saved state. |
+| AI Light Show | Audio-reactive lighting using selected fixtures/groups and supported audio inputs, including NDI audio. |
+| AI Slideshow and NDI video | Drive lighting from images, presentations or a network video source; save reusable setups. |
+| Media, Favorites and Follow Spot | Work with media, keep frequent controls handy, and steer supported moving fixtures. |
+| Stream Deck and MIDI | Trigger supported scene/show actions using the appropriate connector or plugin. See [controller choices](docs/FEATURES.md#stream-deck-and-midi). |
+| Fixture library and CSV import | Find fixture profiles, import supported patch CSVs and check channel mappings against the actual fixture mode. |
+| Backup and diagnostics | Export your configuration and inspect network logs when troubleshooting. |
 
-A licence key enables DMX output. Smart-light control runs through Homebridge, which the
-installers set up for you.
+### Preserve your patch
 
----
+When one external USB DMX input is intentionally reused across multiple universes, keep the assigned channel ranges non-overlapping across that fanout. Independent network universes are a different case. Do not renumber a working patch just to copy an example.
 
-## ⚠️ Photosensitivity and seizure warning
+Smart-light status comes from the configured Homebridge or Home Assistant provider. A provider's reported state is not an independent measurement of a physical lamp. Ordinary DMX fixtures may have no physical readback.
 
-Lighting software can produce flashing, strobing and rapidly changing light. A small number
-of people may experience seizures, loss of awareness or other adverse effects when exposed
-to flashing lights or patterns, including people with no previous history of epilepsy.
+## Choose your platform
 
-**You are responsible for validating any show, scene or effect before running it in front of
-an audience.** Test your programming in the venue, with your own fixtures, before anyone is
-present. Warn your audience where flashing effects are used, and provide a way for people to
-avoid or leave the space.
+| Platform | Current release |
+|---|---|
+| Raspberry Pi 5 | ARM64 package; a useful dedicated hub for permanent installations. |
+| Ubuntu | x86-64 package for a supported PC or VM. |
+| Windows | x64 installer; this release was installation/runtime tested on Windows 11. |
+| macOS | Apple silicon package; this release was installation/runtime tested on an M4 Mac. The current package is not an Intel Mac build. |
 
-DMX Smart Link sends the instructions you give it to the fixtures you have patched. It cannot
-know what your lights will physically do, and it is not a substitute for your own testing and
-judgement.
+For Linux, plan for at least 2 CPU cores and 4 GB RAM, plus free storage for the application, media and updates. A licence is required for licensed lighting operation. Smart-device compatibility depends on your Homebridge plugins or Home Assistant integrations; not every consumer bulb exposes every feature.
 
----
+## Install
 
-# Installation
+### Windows and macOS
 
+1. Download the [Windows installer](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest/download/DMXSmartLink-Setup.exe) or [Apple silicon Mac package](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest/download/DMXSmartLink-Installer.pkg).
+2. Run the installer and follow its prompts.
+3. Open DMXSmartLink. For access from another device on your local network, open `https://<hub-address>:5000`.
+4. Enter your licence and configure your smart-light provider in Settings.
 
-## Install on Windows 11 (one-click)
+### Raspberry Pi 5 and Ubuntu
 
-On Windows, DMX Smart Link installs from a single file — no Python, Docker, or Node.js to set up. Everything (the app, the audio engine, and the Homebridge + Govee integration) is bundled in the installer.
+On a supported 64-bit system, run from the intended user's home directory:
 
-1. **Download:** https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest/download/DMXSmartLink-Setup.exe
-2. **Run it.** (Windows SmartScreen may warn it's from an unknown publisher → *More info* → *Run anyway*.) Accept the license agreement and finish the wizard — it installs the app + Homebridge, opens the firewall, and adds a **DMXSmartLink** Desktop / Start-Menu shortcut.
-3. **Launch** via the DMXSmartLink shortcut. The app opens in its own window and is reachable on your network at `https://<this-pc-ip>:5000` (use that in the iPhone app or another browser).
-4. **First run:** enter your license key to enable DMX output, and sign in to your Govee account in the Homebridge UI (`http://localhost:8581`) to control Govee lights.
-
-**Uninstall:** Settings → Apps → DMX Smart Link → Uninstall (removes the app, the bundled Homebridge, the firewall rules, and all data).
-
----
-
-## Install on macOS
-
-1. **Download:** https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest/download/DMXSmartLink-Installer.pkg
-2. **Run it.** macOS may warn it is from an unidentified developer → right-click the package
-   → *Open* → *Open*. The installer places the app and its bundled Homebridge integration.
-3. **Launch** DMXSmartLink from Applications. The hub is reachable on your network at
-   `https://<this-mac-ip>:5000`.
-4. **First run:** enter your licence key to enable DMX output, and sign in to your smart-light
-   account in the Homebridge UI (`http://localhost:8581`).
-
-Apple Silicon and Intel are both supported.
-
----
-
-## Raspberry Pi 5 / Ubuntu (Linux)
-
-The steps below are for a Raspberry Pi 5 or Ubuntu install.
-
-## Linux System Requirements
-
-- Raspberry Pi 5 (recommended)
-- Ubuntu Server or Virtual Machine
-- Minimum **2 CPUs** and **4 GB RAM**
-- Internet access during installation
-
-### Default Credentials
-```
-Username: dmx
-Password: dmx
-```
-
-**Change this password before the machine is reachable from anywhere but your bench.**
-These are the documented defaults for a fresh image, which means everyone knows them.
-Run `passwd` on first login.
-
----
-
-## Installation Steps
-
-### 1. Install Ubuntu Server
-Install a basic Ubuntu Server on supported hardware or VM or install the Raspberry Pi 5 64bit os via their launcher from https://www.raspberrypi.com/software/.
-
----
-
-### 2. Obtain the IP Address
-You will need the system IP address later.
-
-You can get it by:
-- Installing the iOS app:  
-  `https://apps.apple.com/us/app/dmxsmartlink-hub/id6753700995`
-- Or running one of the following commands:
-```
-ip a
-```
-or
-```
-ifconfig
-```
-
----
-
-### 3. Run the Setup Script
-
-Log in as the `dmx` user and run **one command**:
-
-```
+```bash
 cd ~ && curl -fsSL https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest/download/setup.sh -o setup.sh && sudo bash setup.sh
 ```
 
-That is the whole install. The script downloads the right build for your machine by itself, so there
-is nothing to unpack and no release page to choose from. It takes 15-30 minutes, mostly unattended.
+The setup script selects the platform package. Allow installation to finish, then open `https://<hub-address>:5000`. See the [installation guide](docs/SOP-INSTALL.md) for provider setup and troubleshooting.
 
-**Run it from the home folder.** The `cd ~` matters: the script works out which user to install for
-from the folder it is sitting in, so running it from `/tmp` or `Downloads` installs to the wrong
-place.
+### Homebridge and Home Assistant
 
-<details>
-<summary>If you already downloaded setup.sh by hand</summary>
+- **Homebridge:** configure the bundled integration and the relevant vendor plugin, then check the light in Homebridge **Accessories**. Keep the bundled Govee integration version unless the release instructions say otherwise.
+- **Home Assistant:** enable its integration in Hub Settings and configure the host, port and access token for your Home Assistant instance. Confirm the light is available in that instance before importing it.
+- Refresh the device inventory after provider setup, then test one light before adding the rest of your rig. Never share provider tokens in support posts or screenshots.
 
-```
-sudo su
-cd /home/dmx
-chmod +x setup.sh
-./setup.sh
-```
-</details>
+## Update an existing hub
 
----
+1. [Export a backup](docs/SOP-BACKUP-AND-RESTORE.md).
+2. Open **Dashboard → Updates** and choose **Stable/Latest**. Beta users can switch back to Stable for this release.
+3. Select **Check for Updates**, then **Update Now**. Allow the application to close/restart when required.
+4. Confirm the installed version, then test your saved scenes and connected controllers before an event.
 
-### 4. Access the Web Interface
-After installation completes, open a browser and go to:
-```
-https://<YOUR_IP_ADDRESS>:5000
-```
+For beta testing, enable **Developer mode** and select **Test (pre-release)**. The release tag shown in the UI identifies the package that channel will install. Keep production rigs on Stable unless you deliberately choose to test a candidate.
 
----
+If an update fails, retain the updater log and follow the [update guide](docs/SOP-UPDATE-THE-HUB.md). Desktop installers are also available directly from [Latest](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest).
 
-## Homebridge Setup
+## Validation and known limitations
 
-### 6. Initialize Homebridge
-1. Click **Homebridge UI**
-2. Click **GET STARTED**
-3. Create a username and password
-4. Click **OPEN DASHBOARD**
+The 2026.09.21.1444 release passed installation/native runtime checks on Pi, Ubuntu, Windows and macOS; Windows reinstall data preservation, NDI audio and responsive UI checks also passed. This does not certify every fixture, provider, controller or venue. Native desktop GUI lifecycle coverage remains limited.
 
----
+The intermittent fixture-display flashing report remains under investigation and is **not claimed fixed**. Check the release notes and test scenes, transitions, brightness and color temperature on your actual hardware before an event.
 
-### 7. Install Govee and Alexa Plugin or other vendors light plugins
-1. Navigate to **Plugins**
-2. **DO NOT** update the existing Govee plugin (We recommend this Plugin over Alexa for your Govee lights)
-3. Restart Homebridge
-4. Click the **power plug icon**
-5. Search for **Alexa**
-6. Install **Homebridge Alexa Smarthome** by @joeyhage
+## Photosensitivity and show safety
 
----
+Lighting effects can produce flashing and strobing that may trigger seizures or other adverse effects. Validate effects before using them with an audience, provide appropriate warnings, and keep a way to stop output readily available. The hub cannot determine how every physical fixture will respond to its commands.
 
-### 8. Configure Alexa Plugin
-1. Scroll to **Proxy Client Host**
-2. Enter your **system IP address**
-   - ❌ Do NOT use `127.0.0.1` or `localhost`
-3. Click **SAVE**
-4. Enable **Child Bridge**
-5. Restart Homebridge again
+## Help and support
 
----
+- [Documentation and operating guides](docs/README.md)
+- [YouTube tutorials](https://www.youtube.com/@WhiteCrowSecurity)
+- [Discord community](https://discord.gg/pj6f54dpv7)
+- Email: **support@dmxsmartlink.com**
 
-### 9. Authenticate Amazon Account
+When reporting a problem, include the installed version, platform, fixture/device model, provider and steps to reproduce. Remove credentials and private information from logs.
 
-First login to your amazon.com account then,
-
-Open:
-```
-http://<YOUR_IP_ADDRESS>:9000
-```
-
-Log in using:
-- Amazon email
-- Password
-- OTP from phone or other method
-
-When you see:
-```
-Amazon Alexa Cookie successfully retrieved
-```
-Close the browser tab.
-
----
-
-### 10. Verify Devices
-1. Return to **Homebridge UI**
-2. Click **Accessories**
-3. Wait for Alexa devices to populate
-
----
-
-## DMX Smart Link Configuration
-
-### 11. License Setup
-1. Return to **DMX Smart Link**
-2. Click **Manage Config**
-3. Paste your license key
-4. Enter Homebridge username and password
-5. Click **Update Config**
-6. Confirm license status shows:
-```
-Valid: Expires on ...
-```
-
----
-
-### 12. Import Devices
-1. Click **Refresh Device Inventory**
-2. Confirm success message appears
-
----
-
-### 13. Create Groups
-1. Navigate to **Manage Groups**
-2. Create a new group:
-   - Universe: **2 or higher**
-   - Channels: e.g. `1,2,3,4,5`
-3. Assign devices to the group
-
----
-
-### 14. DMX Software Configuration (Example)
-1. Add **Universe 2**
-2. Add **Generic → Bulb**
-3. Edit profile and set **5 channels**
-4. Assign:
-   - Channel 1: Red
-   - Channel 2: Green
-   - Channel 3: Blue
-   - Channel 4: Dimmer
-   - Channel 5: Color Temperature
-
----
-
-## AI Light Show (Audio Reactive) – Quick Use
-
-The AI Light Show runs inside the dashboard and can drive fixtures/groups based on audio input.
-
-1. Open **AI Light Show (Audio Reactive)**
-2. Select **Input Source (capture)**:
-   - Line-In via USB sound card (tested: **CULILUX CB5**)
-   - Or a system monitor source when analyzing playback on the device
-3. Select **Output Device (speakers)** and click **Apply Settings**
-4. Click **AI Show Start**
-
-### Using the Media Player (Audio/Video files)
-Inside the **AI Light Show** tab there is a **Media Player** section you can use to play local files and run the light show at the same time.
-
-- **Audio files (MP3/WAV/etc)**:
-  - Upload a file, select it, click **Play**
-  - Audio plays in the browser using the built-in player controls
-- **Video files (MP4/etc)**:
-  - Upload a file, select it, click **Play**
-  - Video plays in the browser (with controls)
-  - Click **Fullscreen** for an in-page fullscreen experience
-
-### Fullscreen & iPhone / AirPlay
-- On **iPhone/iOS**, fullscreen uses an **in-page fullscreen overlay** to avoid the common AirPlay takeover behavior.
-- If you want to AirPlay on purpose, use your device’s AirPlay controls; the UI fullscreen is designed to stay local.
-
-### YouTube link playback + light show
-You can paste a YouTube link in **External Video URL (YouTube/etc)** and click **Open** to watch it in the UI.
-
-To sync the light show to a YouTube link:
-- Use the **YouTube sync** feature (server-side audio extraction).
-- **Prerequisite**: `yt-dlp` must be installed on the hub (setup.sh does this for you):
-  - `sudo apt update && sudo apt install -y yt-dlp`
-
-Important note on sync:
-- The embedded YouTube player and server-synced audio may not start at the exact same “0:00” due to ads/buffering/cross-origin limitations.
-- For perfect 1:1 sync between audio and video, use uploaded local media files (single source of truth).
-
----
-
-## Visual Control – Quick Use
-
-Use **Visual Control** for manual testing and setup:
-- Verify your DMX universes and patching
-- Test groups/fixtures output without audio analysis
-
----
-
-## Updating DMX Smart Link
-
-### Option A: Built-in Update
-1. Open the Dashboard
-2. Click **Check for Updates**
-3. Click **Update Now**
-4. System will sync from GitHub and reboot automatically
-
----
-
-### Option B: Manual Update
-1. Download latest release from GitHub
-2. Extract `dmxsmartlink.zip`
-3. Copy files to `/home/$USER`
-4. Run:
-```
-sudo ./setup.sh
-```
-
----
-
-## Support
-
-Email: **support@dmxsmartlink.com**  
-Discord support available via the dashboard or `https://discord.gg/pj6f54dpv7`
-
----
-
-## Legal / implementation note
-The audio-reactive feature uses **standard audio analysis techniques** plus project-specific show-control logic.
+This public repository distributes software builds and customer documentation. Application source is maintained privately. Audio-reactive features use audio analysis and project-specific show-control logic.
 
 © White Crow Security / DMXSmartLink

@@ -1,99 +1,49 @@
-# Update the hub
+# Update DMXSmartLink Hub
 
-**How long:** a few minutes. The hub restarts itself at the end.
+Schedule updates outside a service, show or other live use. [Export a backup](SOP-BACKUP-AND-RESTORE.md) first and allow time to validate your rig afterward.
 
-**Do this when:** a release fixes something you have hit, or adds something you want. There is no
-obligation to update — a hub keeps working exactly as it does today whether or not you ever update
-it.
+## Built-in update
 
----
+1. Open **Dashboard → Updates**.
+2. Confirm the installed version and selected channel.
+3. Select **Check for Updates** and review the available version.
+4. Select **Update Now** and follow the prompts. The application or service may close and restart while installation runs. Keep the host powered on and do not repeatedly start another update.
+5. Reconnect and confirm the **Installed** version matches the release you selected.
 
-## Before you update
-
-**Take a backup first.** It takes fifteen seconds and it is the difference between a bad afternoon
-and a non-event. See [Back up and restore](SOP-BACKUP-AND-RESTORE.md).
-
-**Do not update an hour before a service.** Update on a weekday, then run a scene or two to confirm
-the rig behaves.
-
----
-
-## Update
-
-1. Open the hub and go to the **Dashboard**.
-2. Find the **Updates** panel. It shows:
-   - **Installed** — the version you are on
-   - **Available** — the newest release for your update channel
-   - A badge saying **Up to date** or that an update is available
-3. Press **Check for Updates** if you want to force a fresh look.
-4. Press **Update Now**.
-5. Wait. The status line says *"Updating… please wait. The web UI may restart."* — that restart is
-   normal. Do not reboot the machine or close the tab during it.
-6. When the page comes back, check that **Installed** now shows the new version.
-
----
-
-## After updating
-
-1. Recall a scene you know well. Do the lights do what they should?
-2. Check the DMX Patch page still shows your fixtures where you expect.
-3. If you use a Stream Deck, press a button.
-
-If all three are fine, you are done.
-
----
+The official release **2026.09.21.1444** is on Stable/Latest. Users of its earlier betas can switch back to Stable to install it.
 
 ## Stable and Test channels
 
-The **Updates** panel has a channel toggle.
+| Channel | Purpose |
+|---|---|
+| Stable / Latest | Published official releases. Use this for normal installations. |
+| Test (pre-release) | Candidate releases for deliberate beta testing. Enable Developer mode to expose this option. |
 
-| Channel | Gets | Use it if |
-| --- | --- | --- |
-| **Stable** (default) | Full releases only | You run services on this machine. Leave it here. |
-| **Test (pre-release)** | Pre-releases, earlier | You have a spare machine and want to help us catch things |
+Read the resolved release tag in the UI before installing. The existence of a newer beta does not mean the stable channel should install it.
 
-Do not put your only hub on Test. A pre-release is by definition something we are still checking.
+## Desktop installer fallback
 
----
+If the built-in Windows or macOS update fails, retain its error/log and download the matching installer from [Latest](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest). Close DMXSmartLink as prompted and run the installer over the existing installation. Do not uninstall first as an update workaround; export a backup before making changes.
 
-## If an update goes wrong
+The current Windows package is x64; the current Mac package targets Apple silicon. This release's Windows installer and same-version reinstall passed data-preservation checks; the Mac installation preserved the protected application data in testing. Keep your own backup regardless.
 
-**The page never comes back.**
-Give it two full minutes — a first start after an update is slower than usual. Then, on a Pi or
-Ubuntu:
+## If the Hub does not reconnect
+
+- Allow installation to finish. Check the host's current network address and use `https://<hub-address>:5000`.
+- Keep the updater log. A failed-update message is not proof that the installed version changed successfully.
+- On Pi/Ubuntu, inspect the service without launching another update:
 
 ```bash
 sudo systemctl status dmxsmartlink
-sudo systemctl restart dmxsmartlink
-sudo journalctl -u dmxsmartlink -n 100
+sudo journalctl -u dmxsmartlink -n 100 --no-pager
 ```
 
-On Windows or macOS, quit the app and start it again.
+- Contact support with the platform, previous version, target version and error. Remove credentials from any logs you share.
 
-**It updated, but something is behaving oddly.**
-Restart the hub first — that clears most of it. If it persists, email
-**support@dmxsmartlink.com** with your version number and what you are seeing. Include the log if you
-can get it.
+## Validate before the next event
 
-**My settings or fixtures look wrong.**
-Restore the backup you took before updating. That is what it was for.
+Check your patch and provider connections, recall familiar scenes, inspect brightness and color temperature, and try your controller buttons. For audio/video shows, confirm the source and target selection, load the intended saved setup, and test Stop followed by scene recall.
 
----
+The intermittent fixture-display flashing report remains under investigation. See the [current release notes](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest) for known limitations.
 
-## Updating without internet
-
-A hub on an isolated network cannot pull an update itself. Download the release on a machine that has
-internet, copy it across, and install it the same way you did originally — see
-[Install](SOP-INSTALL.md).
-
-Your data folder is untouched by an install, so your patch and scenes survive. Take a backup first
-anyway.
-
----
-
-## What an update does not change
-
-- **Your licence.** It stays activated. An update is not a reinstall.
-- **Your patch, scenes, groups and stage layout.** Those live in the data folder, which updates do
-  not touch.
-- **Your settings**, including your DMX USB device and universes.
+[Discord support](https://discord.gg/pj6f54dpv7) · **support@dmxsmartlink.com**

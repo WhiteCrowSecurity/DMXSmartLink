@@ -4,6 +4,11 @@ Step-by-step procedures for running a hub, and reference material on how the sys
 guide is written to be followed start to finish by whoever is standing in front of the machine, not
 only by whoever set it up.
 
+## Current features
+
+- [**Scenes, saved shows and controllers**](FEATURES.md) — whole-rig capture, difference-only recall, NDI, Elgato and MIDI-over-IP.
+- [**Latest release**](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest) — downloads, version notes and known limitations.
+
 ## Understanding the system
 
 - [**System architecture**](ARCHITECTURE.md) — diagrams: what talks to what, how DMX reaches a
