@@ -1,5 +1,78 @@
 # DMXSmartLink Release Notes
 
+## 2026.10.07.0005 — Remote access from anywhere, QR pairing, Philips Hue live shows, MIDI Learn
+
+[Downloads and full release](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/tag/DMXSmartLink-v2026.10.07.0005) · [Remote access guide](docs/remote-access.md) · [Hue live shows](docs/hue-live-shows.md) · [MIDI controllers](docs/midi-control.md)
+
+This official release brings together everything tested in the betas 2026.10.03.1500 to 2026.10.06.1805, plus QR-code pairing.
+
+### New in this release: pair phones with a QR code
+
+- **A QR code next to every pairing code.** On **Remote Access** (Devices & remote access), every one-time code now comes with a QR code. Scan it with the phone's camera or with the DMX Smart Link app instead of typing the code. The Hub draws the QR code itself, so it works without an internet connection.
+- **Add the first phone from the browser.** On a new Hub, sign in on the Hub's network with the local admin password and choose **Get a code for the first phone (Admin)**. Scan the QR code or type the code in the app, and that phone becomes the Hub's Admin. A first-phone code only works on the Hub's own network. Opening the app on the Hub's Wi-Fi to set up the first phone still works as before.
+- **Safer pairing.** Before pairing, the app checks that it is talking to the right Hub. If the Hub's identity does not match the code, the app refuses and the code is not used up, so you can try again.
+- **Update the app to scan.** iPhone 1.1 (in App Store review; TestFlight now) and Android 1.1.2 (closed testing; DM us on [Discord](https://discord.gg/pj6f54dpv7) to join) add scanning. Typing the code keeps working on every 1.1 version.
+
+### Remote access: control your Hub from anywhere (betas 2026.10.06.1120 to 2026.10.06.1805)
+
+- **Nothing on your router needs changing.** Pair a phone once and run scenes, Visual Control, DMX fixtures and smart lights from any network.
+- **Admin and Operator phones.** The first phone becomes the Hub's **Admin**. Others are added with a one-time code (works once, for 10 minutes), each either Admin or Operator. Operators can run everything on the Hub; Admins can also add and remove phones, change the local admin password and switch remote access off.
+- **Private by design.** Every phone has its own key kept in the phone's secure hardware, and everything between the phone and the Hub is encrypted end to end. A removed phone is cut off immediately.
+- **Fast when it can be.** When the phone and the Hub can reach each other directly, the app talks to the Hub directly; otherwise it goes through the DMX Smart Link cloud service automatically.
+- **A Remote Access tab** in the Hub's menu: devices, roles, codes, activity, and the **Cloud connection** switch for installations that must stay offline.
+- **Homebridge and Home Assistant from anywhere:** their tabs appear next to the Hub in the app when the Hub runs them, through the same encrypted connection.
+- **Visual Control stays live remotely** (changes from the room appear within about a second), **several phones at once** without slowing each other down, and **steadier on poor connections**.
+- **Local admin password** (default `admin`, must be changed at first use; only accepted on the Hub's own network). Forgot it? Use an Admin phone, **Reset admin password** on the Hub's own screen, or `sudo dmxsmartlink reset-admin-password` on a Pi or Ubuntu Hub.
+- On your local network nothing changes: the app and the browser keep working exactly as before.
+
+### Philips Hue live shows (beta, from 2026.10.06.1805)
+
+- On **Devices → Philips Hue bridges**, choose an entertainment area (made in the Hue app) under **Live shows** for each Hue Bridge. The Hub streams to those lights in real time, 25 updates a second, instead of about ten commands a second per Hue Bridge. The Hue Bridge's other lights keep normal control.
+- Streaming starts when the Hub drives those lights and stops a minute after, so the Hue app gets them back. If streaming fails, those lights fall back to normal control on their own.
+- The card shows Ready, Streaming, or what went wrong for each Hue Bridge.
+- Hue Bridges paired before Sept 25 need pairing again once (press the link button, then Pair) to stream.
+
+### MIDI controllers (betas 2026.10.03.1500 to 2026.10.04.0800)
+
+- **MIDI Learn:** give any knob, fader or pad its own job: a fixture channel, a parameter (Pan, Tilt, Strobe, Dimmer or any channel) on one fixture, a fixture group or all fixtures, the Master Dimmer, Blackout, Return to Auto, scenes and saved shows. Fader, Toggle and Momentary modes with Min/Max ranges.
+- **Plug a USB MIDI controller straight into a Mac or Windows Hub** and choose it in **Settings → MIDI → MIDI Input Device**. The MIDI Connector is now only needed for a controller on a different computer.
+- **Encoders that need less turning:** Response (Normal, 2x to 4x, Accelerated), relative encoder formats, and Smoothing so moving heads glide. Pan and tilt use fine channels where the fixture has them.
+- **Blackout and Master Dimmer** over every scene, Visual Control, the AI Light Show and MIDI; moving heads stay where they are pointed.
+- **Manual override:** a control you move takes just that parameter from the AI Light Show; **Return to Auto** hands it back.
+- **Dashboard → Lighting control** card, and a first, view-only **Control Surface** for the Launch Control XL3.
+
+### Backups carry the whole rig (from 2026.10.04.0800)
+
+Backup & Restore now includes fixture groups, every scene file, the scene and show button order, the AI Light Show's fixture selection, custom fixture definitions, learned MIDI mappings and Control Surface corrections. A restore replaces older scene files already on the machine. Licences, phone pairings and Hue Bridge pairings are not part of a backup.
+
+### Fixture library
+
+18,267 bundled fixture profiles, including more than 140 new profiles across these betas.
+
+### Updating
+
+[Export a backup](docs/SOP-BACKUP-AND-RESTORE.md). In **Dashboard → Updates**, choose the Stable/Latest channel, select **Check for Updates**, then **Update Now**. Let installation and restart finish, then confirm version **2026.10.07.0005**. Users of the 2026.10.x betas can switch back to Stable to install it. Then pair your phones: see [Remote access](docs/remote-access.md).
+
+Test saved scenes, controllers and any Hue live shows on your actual hardware before an event.
+
+---
+
+## 2026.09.28.0423 — Smooth scene fades, Stream Deck start/stop, several Hue Bridges
+
+[Downloads and full release](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/tag/DMXSmartLink-v2026.09.28.0423)
+
+The build tested as the 2026.09.27.2015 beta, together with the changes from the 2026.09.25 to 2026.09.27 betas.
+
+- **Scene fades no longer flicker** on fixtures with a dimmer-mode or curve channel (for example the American DJ COB Cannon and Fixed Spot): a fade ramps only brightness; mode channels switch straight to the scene's value.
+- **Start and stop a saved show from the Stream Deck:** the key for a saved show is a toggle. The lights stay where they are when it stops.
+- **Several Philips Hue Bridges on one Hub:** the Hub pairs Hue Bridges itself from the **Devices** page; each Hue Bridge is driven on its own lane at the pace Hue allows.
+- **Certificate fingerprint in Settings** with a Copy button, for pairing the Elgato Stream Deck plugin.
+- **Moving heads:** colour buttons drive colour-wheel moving heads, the AI Slide Show moves and colours moving heads, and moving heads can move to the beat of a live source.
+- The AI Light Show says when no sound is arriving; the slide show resumes after a restart; wheel dials fit their cards; icons can be moved anywhere on the stage map.
+- Real colour names for about 950 more library fixtures, and new fixture profiles.
+
+---
+
 ## 2026.09.21.1444 — Scenes, saved shows and controller integrations
 
 [Downloads and full release](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/tag/DMXSmartLink-v2026.09.21.1444) · [Feature guide](docs/FEATURES.md)

@@ -73,4 +73,12 @@ Keep access tokens private. Provider compatibility and the available controls de
 
 Preserve an existing external USB DMX fanout patch: when one input frame is reused across universes, assigned channel ranges must not overlap across that fanout.
 
-Next: [Scenes and show setups](FEATURES.md), [Backup and restore](SOP-BACKUP-AND-RESTORE.md), [Update the Hub](SOP-UPDATE-THE-HUB.md).
+## Set up the phone app and remote access
+
+Install the DMX Smart Link app on your phone, connect it to the Hub's Wi-Fi and open the Hub. The first phone becomes the Hub's **Admin** and can then use the Hub from any network. See [Remote access](remote-access.md).
+
+### Philips Hue
+
+Pair a Hue Bridge directly from the Hub's **Devices** page (press the link button on the Hue Bridge, then **Pair bridge**). See [Philips Hue](hue-live-shows.md).
+
+Next: [Scenes and show setups](FEATURES.md), [MIDI controllers](midi-control.md), [Backup and restore](SOP-BACKUP-AND-RESTORE.md), [Update the Hub](SOP-UPDATE-THE-HUB.md).

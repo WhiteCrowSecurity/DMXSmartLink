@@ -33,7 +33,9 @@ Nothing on the hub changes when you export. It is safe to do in the middle of a 
 3. The page tells you **when the backup was made**, what version it came from, and exactly what it is
    about to replace. Nothing has happened yet.
 4. Read that, then click **Restore this backup**.
-5. The page reloads. Your fixtures, scenes, groups and stage layout are back.
+5. The page reloads. Your fixtures, scenes, groups, stage layout and controller mappings are back.
+   Any older scene files already on the machine are replaced, so the restored scenes are the ones you
+   see.
 
 You do not need to restart the hub.
 
@@ -56,14 +58,22 @@ will help you put it back.
 3. **Activate the new machine's licence** — see [Activate your licence](SOP-ACTIVATE-A-LICENCE.md).
 4. **Import** the backup.
 
-Your patch, scenes and stage come across. Your licence does not, and that is deliberate — see below.
+Your patch, scenes, stage and controller setup come across. Your licence does not, and that is
+deliberate — see below. Afterwards, set up remote access again ([Remote access](remote-access.md)) and
+pair any Philips Hue Bridge again ([Hue](hue-live-shows.md)).
 
 ---
 
 ## What is in the file, and what is not
 
-**In it:** fixtures and their stage positions, scenes, groups and the stage background, your smart
-light inventory, the Visual Control layout, follow-spot settings, and your ordinary settings.
+**In it — the whole rig:**
+
+- fixtures and their stage positions, your own custom fixture definitions, and the stage background;
+- every scene file, groups, fixture groups, and the order of scene and show buttons (decks, pads, OSC);
+- saved AI Light Show, Slideshow and NDI setups, and the AI Light Show's fixture selection;
+- your smart light inventory, the Visual Control layout and follow-spot settings;
+- learned MIDI mappings and Control Surface corrections;
+- your ordinary settings.
 
 **Not in it — on purpose:**
 
@@ -71,11 +81,15 @@ light inventory, the Visual Control layout, follow-spot settings, and your ordin
   might get emailed around. A restored hub asks for its own licence.
 - **Passwords and API keys** — Home Assistant token, Homebridge password, Govee API key, email
   password. The backup tells you which ones it left out.
+- **Pairings** — the phones paired for remote access and the local admin password, Philips Hue Bridge
+  pairing keys, and the network MIDI Connector's pairing key. They contain keys, so they stay with the
+  machine. Pair them again after moving to a new machine.
 - **Live status** — which scene is up right now, what the DMX output looked like a moment ago,
-  whether a Stream Deck is plugged in. All of that rebuilds itself in seconds.
+  whether a Stream Deck is plugged in, Blackout and the Master Dimmer level (a restored hub starts at
+  full). All of that rebuilds itself in seconds.
 
 This means a backup file is safe to store in cloud storage or hand to support. It does not contain
-your licence or your passwords.
+your licence, your passwords or your pairing keys.
 
 ---
 

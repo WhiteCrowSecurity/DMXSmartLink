@@ -10,7 +10,7 @@ Schedule updates outside a service, show or other live use. [Export a backup](SO
 4. Select **Update Now** and follow the prompts. The application or service may close and restart while installation runs. Keep the host powered on and do not repeatedly start another update.
 5. Reconnect and confirm the **Installed** version matches the release you selected.
 
-The official release **2026.09.21.1444** is on Stable/Latest. Users of its earlier betas can switch back to Stable to install it.
+The official release **2026.10.07.0005** is on Stable/Latest. Users of its betas (2026.10.03.1500 to 2026.10.06.1805) can switch back to Stable to install it. After updating, see [Remote access](remote-access.md) to pair your phones.
 
 ## Stable and Test channels
 
@@ -42,7 +42,7 @@ sudo journalctl -u dmxsmartlink -n 100 --no-pager
 
 ## Validate before the next event
 
-Check your patch and provider connections, recall familiar scenes, inspect brightness and color temperature, and try your controller buttons. For audio/video shows, confirm the source and target selection, load the intended saved setup, and test Stop followed by scene recall.
+Check your patch and provider connections (including any Philips Hue Bridge), recall familiar scenes, inspect brightness and color temperature, and try your controller buttons and learned MIDI controls. For audio/video shows, confirm the source and target selection, load the intended saved setup, and test Stop followed by scene recall.
 
 The intermittent fixture-display flashing report remains under investigation. See the [current release notes](https://github.com/WhiteCrowSecurity/DMXSmartLink/releases/latest) for known limitations.
 

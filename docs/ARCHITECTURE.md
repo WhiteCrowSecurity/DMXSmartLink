@@ -11,7 +11,8 @@ existing rig.
 ```mermaid
 graph TB
     subgraph operators["People"]
-        PHONE["Phone / tablet<br/>web UI"]
+        PHONE["Phone / tablet<br/>web UI or app"]
+        AWAY["Phone away from site<br/>DMX Smart Link app"]
         DESK["Laptop / kiosk<br/>web UI"]
         DECK["Stream Deck"]
         PAD["Game controller"]
@@ -28,10 +29,12 @@ graph TB
 
     subgraph lights["Lights"]
         DMX["DMX fixtures<br/>movers, pars, washes"]
-        SMART["Smart lights<br/>Wi-Fi / Bluetooth"]
+        SMART["Smart lights<br/>via Homebridge /<br/>Home Assistant"]
+        HUE["Philips Hue lights<br/>via the Hue Bridge"]
     end
 
     PHONE --> HUB
+    AWAY -.->|"remote access,<br/>end-to-end encrypted"| HUB
     DESK --> HUB
     DECK --> HUB
     PAD --> HUB
@@ -42,6 +45,7 @@ graph TB
 
     HUB -->|USB - DMX512| DMX
     HUB -->|Wi-Fi / BLE| SMART
+    HUB -->|"Hue Bridge,<br/>live-show streaming"| HUE
     HUB -.->|NDI out| PP
 
     classDef hub fill:#5b4bb7,stroke:#2f2a63,color:#fff,stroke-width:2px
@@ -49,7 +53,9 @@ graph TB
 ```
 
 The hub is one machine on your local network. Everything else reaches it over that network, or
-plugs into it.
+plugs into it. The one exception is a paired phone away from the site, which reaches the hub through
+[remote access](remote-access.md): end-to-end encrypted, direct when possible, otherwise through the
+DMX Smart Link cloud service, with nothing to change on your router.
 
 ---
 
@@ -94,7 +100,8 @@ graph LR
 Each worker is a **separate process**. A hung Stream Deck or a crash in a native library cannot take
 the web interface down with it, and they restart on their own.
 
-There is no database and no cloud account. State is plain JSON files on the hub's disk.
+There is no database and no cloud account to create. State is plain JSON files on the hub's disk. Remote
+access only passes encrypted messages between your phone and the hub; your patch and scenes stay on the hub.
 
 ---
 
@@ -208,13 +215,13 @@ graph TD
 
     Q2 -->|"Recalling scenes"| A1["Stream Deck<br/>or the web UI"]
     Q2 -->|"Following a person<br/>with a beam"| A2["Follow Spot page<br/>or a game controller"]
-    Q2 -->|"Building a look"| A3["Visual Control<br/>in a browser"]
+    Q2 -->|"Building a scene"| A3["Visual Control<br/>in a browser"]
 
     Q3 -->|"Art-Net / sACN"| B1["Send it to the hub -<br/>it merges per channel"]
     Q3 -->|"OSC"| B2["UDP 8000<br/>/dmxsl/scene/recall"]
     Q3 -->|"HTTP"| B3["The control API"]
     Q3 -->|"NDI video"| B4["Lights follow the picture"]
-    Q3 -->|"Nothing useful"| B5["Home Assistant<br/>as the bridge"]
+    Q3 -->|"Nothing useful"| B5["Home Assistant<br/>in between"]
 ```
 
 ---
@@ -230,8 +237,12 @@ graph TD
 | In / out | NDI | discovery + dynamic | ProPresenter, OBS, confidence monitors |
 | Out | DMX512 | USB serial | The lighting rig |
 | Out | Wi-Fi / BLE | — | Smart lights |
+| Out | HTTPS, Hue Entertainment | 443, UDP 2100 | Philips Hue Bridge (normal control, live shows) |
+| Out | Encrypted connection, outgoing only | — | Remote access through the DMX Smart Link cloud service (an Admin can switch it off) |
 
-All of it is local network. The hub does not require outbound internet to run.
+Everything else is local network. The hub does not require outbound internet to run. Remote access
+keeps one outgoing connection open; nothing on your router needs changing, and an Admin can switch it
+off for an offline install.
 
 ---
 
@@ -242,7 +253,7 @@ graph TB
     HUB4["DMX Smart Link hub"]
     HUB4 --> D1["Your local network"]
     HUB4 --> D2["A USB DMX interface<br/>(only for DMX fixtures)"]
-    HUB4 -.->|"activation, updates,<br/>and a licence check-in<br/>- none of them required"| D3["The internet"]
+    HUB4 -.->|"activation, updates,<br/>a licence check-in and<br/>remote access<br/>- none of them required"| D3["The internet"]
 
     classDef opt stroke-dasharray: 5 5
     class D3 opt
@@ -265,4 +276,5 @@ hub keeps running on its valid key, and only an explicit rejection stops it.
 - [How it works](HOW-IT-WORKS.md) — the same ground in prose
 - [Install](SOP-INSTALL.md) — getting a hub running
 - [Follow Spot](SOP-FOLLOW-SPOT.md) — steering a light by hand
+- [Remote access](remote-access.md) — using the hub from a phone away from the site
 - [Back up and restore](SOP-BACKUP-AND-RESTORE.md)

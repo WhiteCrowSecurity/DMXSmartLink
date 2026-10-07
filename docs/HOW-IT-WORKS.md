@@ -47,8 +47,10 @@ This is what lets you put DMX Smart Link alongside gear you already own rather t
 
 | From | How |
 | --- | --- |
-| A browser or phone | The web UI |
+| A browser or phone | The web UI, or the DMX Smart Link app |
+| A phone away from the site | [Remote access](remote-access.md): the same pages, end-to-end encrypted |
 | A Stream Deck | Plug it into the hub — scene buttons, no configuration |
+| A MIDI controller | Plug it in and learn faders, knobs and pads — see [MIDI controllers](midi-control.md) |
 | A lighting console or another app | **Art-Net** (UDP 6454) or **sACN** (UDP 5568) into the hub |
 | ProPresenter, QLab, TouchOSC, a show controller | **OSC** on UDP 8000 — `/dmxsl/scene/recall`, `/next`, `/prev` |
 | Your own script or panel | The HTTP control API |
@@ -73,7 +75,7 @@ The hub speaks NDI both ways, with the runtime built in — nothing to install.
 
 ## Fixtures
 
-Over 12,000 fixtures ship built in, from the Open Fixture Library, FreeStyler and Lightkey. Patch by
+Over 18,000 fixture profiles ship built in, from the Open Fixture Library, FreeStyler and Lightkey. Patch by
 picking the model and setting its address; the hub knows its channels.
 
 Anything it does not know, you can define by hand, or import from a CSV or a GDTF file. A fixture is
@@ -96,7 +98,8 @@ stage layout. You can read them, back them up, and move them to another machine.
 | Windows | `C:\ProgramData\DMXSmartLink` |
 | macOS | `~/Library/Application Support/DMXSmartLink` |
 
-There is no cloud account and no hosted database. See
+There is no cloud account to create and no hosted database. Remote access passes encrypted messages
+between your phone and the hub; your data stays on the hub. See
 [Back up and restore](SOP-BACKUP-AND-RESTORE.md).
 
 ---
@@ -118,7 +121,8 @@ Activation needs internet once, and even that has a manual path for a machine th
 
 ## What it is not
 
-- **Not a cloud service.** It runs on your hardware, on your network.
+- **Not a cloud service.** It runs on your hardware, on your network. Remote access is optional: the
+  hub works the same with it switched off.
 - **Not a replacement for a console** on a large touring rig. It is built for churches, small venues,
   studios and installs — places where the person running lights is also doing three other jobs.
 - **Not dependent on our servers to keep working.** If this company vanished tomorrow, your hub would
